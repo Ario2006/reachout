@@ -1,0 +1,13 @@
+# Milestone 1 dependencies. Later milestones add ddgs, trafilatura, selectolax, etc.
+streamlit>=1.40
+sqlalchemy>=2.0
+pydantic>=2.6
+keyring>=25.0
+ollama>=0.4
+httpx>=0.27
+email-validator>=2.1
+dnspython>=2.6
+apscheduler>=3.10,<4
+jinja2>=3.1
+psutil>=5.9
+pytest>=8.0
