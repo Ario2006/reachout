@@ -2,7 +2,7 @@ import keyring
 import pytest
 from keyring.backend import KeyringBackend
 
-from app.core import db
+from backend.core import db
 
 
 class MemoryKeyring(KeyringBackend):
@@ -37,7 +37,7 @@ def home(tmp_path, monkeypatch):
 
 @pytest.fixture
 def engine(home):
-    from app.core import config
+    from backend.core import config
 
     config.ensure_dirs()
     eng = db.get_engine()

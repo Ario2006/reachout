@@ -1,7 +1,7 @@
 import os
 
-from app.core import config, db, secrets
-from app.core.models import AppSettings
+from backend.core import config, db, secrets
+from backend.core.models import AppSettings
 
 
 def test_roundtrip_and_delete(memory_keyring):

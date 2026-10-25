@@ -2,8 +2,8 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import text
 
-from app.core import db
-from app.core.models import AppSettings, risk_warnings
+from backend.core import db
+from backend.core.models import AppSettings, risk_warnings
 
 
 def test_defaults_match_spec(engine):

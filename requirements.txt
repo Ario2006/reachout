@@ -1,5 +1,6 @@
-# Milestone 1 dependencies. Later milestones add ddgs, trafilatura, selectolax, etc.
-streamlit>=1.40
+# Backend dependencies. Later milestones add ddgs, trafilatura, selectolax, etc.
+fastapi>=0.115
+uvicorn>=0.32
 sqlalchemy>=2.0
 pydantic>=2.6
 keyring>=25.0

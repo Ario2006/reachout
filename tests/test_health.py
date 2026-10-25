@@ -1,7 +1,7 @@
 import imaplib
 import smtplib
 
-from app.core import health, llm
+from backend.core import health, llm
 
 
 class FakeSMTP:

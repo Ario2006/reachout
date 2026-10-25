@@ -1,0 +1,1538 @@
+{
+  "components": {
+    "schemas": {
+      "AppSettings": {
+        "description": "Everything here is stored in the SQLite `settings` table. Never add secrets.",
+        "properties": {
+          "allow_guessed_emails": {
+            "default": false,
+            "title": "Allow Guessed Emails",
+            "type": "boolean"
+          },
+          "crawl_delay_max_s": {
+            "default": 2.0,
+            "minimum": 0.5,
+            "title": "Crawl Delay Max S",
+            "type": "number"
+          },
+          "crawl_delay_min_s": {
+            "default": 1.0,
+            "minimum": 0.5,
+            "title": "Crawl Delay Min S",
+            "type": "number"
+          },
+          "daily_cap": {
+            "default": 25,
+            "minimum": 1.0,
+            "title": "Daily Cap",
+            "type": "integer"
+          },
+          "delay_max_s": {
+            "default": 180,
+            "minimum": 0.0,
+            "title": "Delay Max S",
+            "type": "integer"
+          },
+          "delay_min_s": {
+            "default": 60,
+            "minimum": 0.0,
+            "title": "Delay Min S",
+            "type": "integer"
+          },
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fetch_timeout_s": {
+            "default": 15,
+            "maximum": 60.0,
+            "minimum": 5.0,
+            "title": "Fetch Timeout S",
+            "type": "integer"
+          },
+          "first_run_complete": {
+            "default": false,
+            "title": "First Run Complete",
+            "type": "boolean"
+          },
+          "footer_text": {
+            "default": "If you'd rather not hear from me, just reply 'stop' and I won't email again.",
+            "title": "Footer Text",
+            "type": "string"
+          },
+          "gmail_address": {
+            "default": "",
+            "title": "Gmail Address",
+            "type": "string"
+          },
+          "keep_alive": {
+            "default": "5m",
+            "title": "Keep Alive",
+            "type": "string"
+          },
+          "legal_acknowledged": {
+            "default": false,
+            "title": "Legal Acknowledged",
+            "type": "boolean"
+          },
+          "max_pages_per_domain": {
+            "default": 6,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Pages Per Domain",
+            "type": "integer"
+          },
+          "num_ctx": {
+            "default": 4096,
+            "maximum": 8192.0,
+            "minimum": 1024.0,
+            "title": "Num Ctx",
+            "type": "integer"
+          },
+          "ollama_model": {
+            "default": "qwen2.5:3b-instruct",
+            "title": "Ollama Model",
+            "type": "string"
+          },
+          "search_source": {
+            "default": "ddgs",
+            "pattern": "^(ddgs|searxng)$",
+            "title": "Search Source",
+            "type": "string"
+          },
+          "searxng_url": {
+            "default": "",
+            "title": "Searxng Url",
+            "type": "string"
+          },
+          "send_days": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Send Days",
+            "type": "array"
+          },
+          "window_end": {
+            "default": "18:00",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "default": "09:00",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "title": "AppSettings",
+        "type": "object"
+      },
+      "CheckOut": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "hint": {
+            "default": "",
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "detail"
+        ],
+        "title": "CheckOut",
+        "type": "object"
+      },
+      "CompleteSetup": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "footer_text": {
+            "minLength": 1,
+            "title": "Footer Text",
+            "type": "string"
+          },
+          "legal_acknowledged": {
+            "title": "Legal Acknowledged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "display_name",
+          "footer_text",
+          "legal_acknowledged"
+        ],
+        "title": "CompleteSetup",
+        "type": "object"
+      },
+      "GmailStatus": {
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "password_set": {
+            "title": "Password Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "address",
+          "password_set"
+        ],
+        "title": "GmailStatus",
+        "type": "object"
+      },
+      "GmailTestResult": {
+        "properties": {
+          "imap": {
+            "$ref": "#/components/schemas/CheckOut"
+          },
+          "smtp": {
+            "$ref": "#/components/schemas/CheckOut"
+          }
+        },
+        "required": [
+          "smtp",
+          "imap"
+        ],
+        "title": "GmailTestResult",
+        "type": "object"
+      },
+      "GmailUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "format": "email",
+            "title": "Address",
+            "type": "string"
+          },
+          "app_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Password"
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "title": "GmailUpdate",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthOut": {
+        "properties": {
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "worker": {
+            "$ref": "#/components/schemas/WorkerOut"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "schema_version",
+          "worker"
+        ],
+        "title": "HealthOut",
+        "type": "object"
+      },
+      "JobOut": {
+        "properties": {
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Payload",
+            "type": "object"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "progress",
+          "total",
+          "cancel_requested",
+          "created_at"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
+      "Limits": {
+        "properties": {
+          "hard_daily_ceiling": {
+            "title": "Hard Daily Ceiling",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hard_daily_ceiling"
+        ],
+        "title": "Limits",
+        "type": "object"
+      },
+      "ModelsOut": {
+        "properties": {
+          "installed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Installed",
+            "type": "array"
+          },
+          "ollama_running": {
+            "title": "Ollama Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ollama_running",
+          "installed"
+        ],
+        "title": "ModelsOut",
+        "type": "object"
+      },
+      "PullModelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "title": "PullModelRequest",
+        "type": "object"
+      },
+      "SettingsResponse": {
+        "properties": {
+          "gmail_password_set": {
+            "title": "Gmail Password Set",
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "notices": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/AppSettings"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "settings",
+          "gmail_password_set",
+          "warnings",
+          "limits"
+        ],
+        "title": "SettingsResponse",
+        "type": "object"
+      },
+      "SettingsUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update of editable settings. Omitted fields keep their value.",
+        "properties": {
+          "allow_guessed_emails": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Guessed Emails"
+          },
+          "crawl_delay_max_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Delay Max S"
+          },
+          "crawl_delay_min_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Delay Min S"
+          },
+          "daily_cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Cap"
+          },
+          "delay_max_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Max S"
+          },
+          "delay_min_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Min S"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "fetch_timeout_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetch Timeout S"
+          },
+          "footer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footer Text"
+          },
+          "keep_alive": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Alive"
+          },
+          "max_pages_per_domain": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Pages Per Domain"
+          },
+          "num_ctx": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Ctx"
+          },
+          "ollama_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ollama Model"
+          },
+          "search_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Source"
+          },
+          "searxng_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Searxng Url"
+          },
+          "send_days": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Send Days"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          }
+        },
+        "title": "SettingsUpdate",
+        "type": "object"
+      },
+      "SetupStatus": {
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/CheckOut"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "first_run_complete": {
+            "title": "First Run Complete",
+            "type": "boolean"
+          },
+          "footer_text": {
+            "title": "Footer Text",
+            "type": "string"
+          },
+          "gmail": {
+            "$ref": "#/components/schemas/GmailStatus"
+          },
+          "legal_acknowledged": {
+            "title": "Legal Acknowledged",
+            "type": "boolean"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "pull_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "worker": {
+            "$ref": "#/components/schemas/WorkerOut"
+          }
+        },
+        "required": [
+          "first_run_complete",
+          "legal_acknowledged",
+          "display_name",
+          "footer_text",
+          "model",
+          "checks",
+          "gmail",
+          "worker"
+        ],
+        "title": "SetupStatus",
+        "type": "object"
+      },
+      "SuppressionAdd": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "SuppressionAdd",
+        "type": "object"
+      },
+      "SuppressionEntry": {
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "removable": {
+            "title": "Removable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "added_at",
+          "removable"
+        ],
+        "title": "SuppressionEntry",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkerOut": {
+        "properties": {
+          "age_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age S"
+          },
+          "alive": {
+            "title": "Alive",
+            "type": "boolean"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          }
+        },
+        "required": [
+          "alive"
+        ],
+        "title": "WorkerOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Reachout API",
+    "version": "0.2.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/events": {
+      "get": {
+        "description": "New events only by default; send Last-Event-ID to resume after a reconnect.",
+        "operationId": "stream_events_events_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "last-event-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/jobs": {
+      "get": {
+        "operationId": "list_jobs_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobOut"
+                  },
+                  "title": "Response List Jobs Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/jobs/{job_id}": {
+      "get": {
+        "operationId": "get_job_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_job_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/settings": {
+      "get": {
+        "operationId": "get_settings_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "operationId": "update_settings_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/settings/gmail": {
+      "get": {
+        "operationId": "get_gmail_settings_gmail_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Gmail",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Writes the App Password to the macOS Keychain. The password is never stored or echoed.",
+        "operationId": "put_gmail_settings_gmail_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GmailUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Gmail",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/settings/gmail/password": {
+      "delete": {
+        "operationId": "delete_gmail_password_settings_gmail_password_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Gmail Password",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/setup/complete": {
+      "post": {
+        "operationId": "complete_setup_complete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteSetup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/setup/models": {
+      "get": {
+        "description": "Models installed in Ollama (for the Settings dropdown).",
+        "operationId": "models_setup_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Models",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/setup/pull-model": {
+      "post": {
+        "description": "Queue a model pull (runs in the worker). Progress arrives as `job` events on /events.",
+        "operationId": "pull_model_setup_pull_model_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PullModelRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pull Model",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/setup/status": {
+      "get": {
+        "operationId": "status_setup_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/setup/test-gmail": {
+      "post": {
+        "description": "Logs in to Gmail SMTP and IMAP with the saved address and Keychain password.",
+        "operationId": "test_gmail_setup_test_gmail_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailTestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Test Gmail",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/suppression": {
+      "delete": {
+        "description": "Only entries added by hand can be removed; bounce and opt-out entries are permanent.",
+        "operationId": "remove_suppression_suppression_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "title": "Email",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Must equal `email` (typed confirmation)",
+            "in": "query",
+            "name": "confirm",
+            "required": true,
+            "schema": {
+              "description": "Must equal `email` (typed confirmation)",
+              "title": "Confirm",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Suppression",
+        "tags": [
+          "suppression"
+        ]
+      },
+      "get": {
+        "operationId": "list_suppression_suppression_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SuppressionEntry"
+                  },
+                  "title": "Response List Suppression Suppression Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Suppression",
+        "tags": [
+          "suppression"
+        ]
+      },
+      "post": {
+        "operationId": "add_suppression_suppression_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuppressionAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuppressionEntry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Suppression",
+        "tags": [
+          "suppression"
+        ]
+      }
+    }
+  }
+}

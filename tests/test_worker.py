@@ -1,7 +1,7 @@
 import os
 
-from app import worker
-from app.core import db
+from backend import worker
+from backend.core import db
 
 
 def test_heartbeat_job_updates_db(engine):

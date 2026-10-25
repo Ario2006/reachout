@@ -3,21 +3,21 @@ import sqlite3
 import pytest
 from sqlalchemy import text
 
-from app.core import db
+from backend.core import db
 
 
 def test_migrations_apply_and_are_idempotent(home):
     eng = db.get_engine()
-    assert db.migrate(eng) == [1]
+    assert db.migrate(eng) == [1, 2]
     assert db.migrate(eng) == []
-    assert db.schema_version(eng) == 1
+    assert db.schema_version(eng) == 2
 
 
 def test_all_spec_tables_exist(engine):
     with engine.connect() as c:
         names = {r[0] for r in c.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
     for t in ["leads", "search_runs", "templates", "campaigns", "drafts", "messages",
-              "events", "suppression", "settings"]:
+              "events", "suppression", "settings", "jobs", "event_log"]:
         assert t in names
 
 
