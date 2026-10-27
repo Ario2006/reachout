@@ -47,7 +47,7 @@ export function DryRunDialog({ jobId, onClose }: { jobId: number | null; onClose
                     <div className="text-muted-foreground truncate">{l.subject}</div>
                     {l.reason ? <div className="text-muted-foreground text-xs">{l.reason}</div> : null}
                   </div>
-                  <span className={l.decision === 'would_send' ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}>
+                  <span className={l.decision === 'would_send' ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'}>
                     {l.decision === 'would_send' ? 'Would send' : 'Blocked'}
                   </span>
                 </li>

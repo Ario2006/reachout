@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ApiError } from '@/lib/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -71,7 +72,15 @@ export function RunProgress({ runId }: { runId: number }) {
     if (el) el.scrollTop = el.scrollHeight
   }, [logLines.length])
 
-  if (detail.isPending) return <Skeleton className="h-64" aria-label="Loading run" />
+  if (detail.isPending) return <Skeleton className="h-64" role="status" aria-label="Loading run" />
+  if (detail.isError) {
+    return (
+      <div role="alert" className="space-y-2 rounded-lg border p-4 text-sm">
+        <p className="text-destructive">Could not load this search. {detail.error instanceof ApiError ? detail.error.detail : ''}</p>
+        <Button size="sm" variant="outline" onClick={() => void detail.refetch()}>Retry</Button>
+      </div>
+    )
+  }
   if (!run) return null
 
   const total = Math.max(num(stats, 'domains_total'), 1)
@@ -110,6 +119,10 @@ export function RunProgress({ runId }: { runId: number }) {
           ))}
         </ol>
         <Progress value={state === 'succeeded' ? 100 : Math.round(pct)} aria-label="Overall progress" />
+        {/* Announces stage changes and the outcome only, not every counter tick. */}
+        <p className="sr-only" role="status" data-testid="run-announce">
+          {active ? `Search in progress: ${stage}.` : `Search ${state}. ${pluralize(num(stats, 'leads_new'), 'new lead')}.`}
+        </p>
         <p className="text-muted-foreground text-xs">Sites are crawled, read and checked one by one, so these steps overlap. Leads appear below as soon as each site is done.</p>
 
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1" data-testid="lead-counters">
@@ -149,7 +162,7 @@ export function RunProgress({ runId }: { runId: number }) {
         <div className="grid gap-4 lg:grid-cols-2">
           <div>
             <h3 className="mb-1.5 text-sm font-medium">Log</h3>
-            <div ref={logRef} className="bg-muted/40 h-56 overflow-y-auto rounded-lg border p-2 font-mono text-xs leading-relaxed" role="log" aria-live="off" data-testid="run-log">
+            <div ref={logRef} className="bg-muted/40 h-56 overflow-y-auto rounded-lg border p-2 font-mono text-xs leading-relaxed" role="log" aria-label="Run log" aria-live="off" data-testid="run-log">
               {logLines.length === 0 ? <span className="text-muted-foreground">Waiting for the worker…</span> : logLines.map((l, i) => <div key={i} className="break-words">{l}</div>)}
             </div>
           </div>

@@ -39,7 +39,7 @@ export function TemplatePicker({ value, onChange, mode, followupsEnabled, disabl
   return (
     <div className="space-y-1.5 sm:col-span-2" data-testid="template-picker">
       <Label htmlFor="c-template">Template</Label>
-      {templates.isPending ? <Skeleton className="h-8 w-full" aria-label="Loading templates" /> : templates.isError ? (
+      {templates.isPending ? <Skeleton className="h-8 w-full" role="status" aria-label="Loading templates" /> : templates.isError ? (
         <p role="alert" className="text-destructive flex items-center gap-3 text-sm">
           {templates.error instanceof ApiError ? templates.error.detail : 'Could not load templates.'}
           <Button type="button" size="xs" variant="outline" onClick={() => void templates.refetch()}>Retry</Button>

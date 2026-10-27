@@ -165,7 +165,7 @@ export function LeadsPage() {
 
       <div className="min-h-0 flex-1">
         {leads.isPending ? (
-          <div className="space-y-2" aria-label="Loading leads">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-11" />)}</div>
+          <div className="space-y-2" role="status" aria-label="Loading leads">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-11" />)}</div>
         ) : leads.isError ? (
           <div className="flex flex-col items-start gap-3 rounded-lg border p-6" role="alert">
             <p className="text-destructive text-sm">{leads.error instanceof ApiError ? leads.error.detail : 'Could not load leads.'}</p>

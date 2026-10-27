@@ -48,7 +48,7 @@ function CheckStatus() {
 
 const ThreadRow = memo(function ThreadRow({ t, selected, onSelect }: { t: ThreadSummary; selected: boolean; onSelect: (leadId: number) => void }) {
   return (
-    <li>
+    <li className="item-enter">
       <button type="button" onClick={() => onSelect(t.lead.id)} aria-current={selected ? 'true' : undefined} data-testid="thread-row"
         className={cn('hover:bg-muted/60 focus-visible:ring-ring w-full border-b px-3 py-2.5 text-left outline-none focus-visible:ring-2', selected && 'bg-muted')}>
         <div className="flex items-center gap-2">
@@ -123,7 +123,7 @@ export function InboxPage() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {threads.isPending ? (
-              <div className="space-y-2 p-3" aria-label="Loading conversations">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14" />)}</div>
+              <div className="space-y-2 p-3" role="status" aria-label="Loading conversations">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14" />)}</div>
             ) : threads.isError ? (
               <div className="p-4" role="alert">
                 <p className="text-destructive text-sm">Could not load conversations. {threads.error instanceof ApiError ? threads.error.detail : ''}</p>

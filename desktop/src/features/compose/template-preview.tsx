@@ -49,7 +49,7 @@ export function TemplatePreview({ template }: { template: TemplateIn }) {
           <Button size="xs" variant="outline" onClick={() => void preview.refetch()}>Retry</Button>
         </AlertDescription></Alert>
       ) : null}
-      {!p && preview.isPending ? <div className="space-y-2" aria-label="Loading preview"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-32" /></div> : null}
+      {!p && preview.isPending ? <div className="space-y-2" role="status" aria-label="Loading preview"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-32" /></div> : null}
       {p ? (
         <div className="space-y-2">
           <p className="text-sm"><span className="text-muted-foreground">Subject: </span><span className="font-medium" data-testid="preview-subject">{p.subject}</span></p>
@@ -58,7 +58,7 @@ export function TemplatePreview({ template }: { template: TemplateIn }) {
           </div>
           <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-xs">
             <span><mark className="bg-primary/15 rounded-sm px-1">Highlighted</mark> text is written by the local model for each lead. This is a placeholder.</span>
-            <span data-testid="word-count" className={p.word_count > 120 ? 'text-amber-600' : ''}>{p.word_count} words{p.word_count > 120 ? ' (aim for under 120)' : ''}</span>
+            <span data-testid="word-count" className={p.word_count > 120 ? 'text-amber-700 dark:text-amber-400' : ''}>{p.word_count} words{p.word_count > 120 ? ' (aim for under 120)' : ''}</span>
             <Button variant="link" size="xs" onClick={() => setAsSent((v) => !v)}>{asSent ? 'Show email body' : 'Show as sent (with footer)'}</Button>
           </div>
           {p.missing_fields.length > 0 ? (

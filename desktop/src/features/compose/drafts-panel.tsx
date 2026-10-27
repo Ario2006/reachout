@@ -143,7 +143,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
       </div>
 
       {drafts.isPending ? (
-        <div className="space-y-2" aria-label="Loading drafts" data-testid="drafts-loading">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-14" />)}</div>
+        <div className="space-y-2" role="status" aria-label="Loading drafts" data-testid="drafts-loading">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-14" />)}</div>
       ) : drafts.isError ? (
         <Alert variant="destructive" role="alert"><AlertDescription className="flex items-center gap-3">
           {drafts.error instanceof ApiError ? drafts.error.detail : 'Could not load drafts.'}
@@ -164,7 +164,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
         </div>
       )}
       {items.some((d) => d.flags.some((f) => f.code === 'missing_field')) ? (
-        <p className="text-xs text-amber-600" role="status" data-testid="missing-hint">Some drafts have empty merge fields. Fill your profile fields on the Profile tab, then rewrite those drafts.</p>
+        <p className="text-xs text-amber-700 dark:text-amber-400" role="status" data-testid="missing-hint">Some drafts have empty merge fields. Fill your profile fields on the Profile tab, then rewrite those drafts.</p>
       ) : null}
       <p className="text-muted-foreground text-xs">Keyboard: <kbd>A</kbd> approve, <kbd>R</kbd> reject, <kbd>J</kbd> next, <kbd>K</kbd> previous. Nothing is sent until you start a campaign.</p>
 
@@ -191,7 +191,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
 
 const DraftRow = memo(function DraftRow({ d, st, active, onSelect }: { d: DraftItem; st: DraftStatus; active: boolean; onSelect: (id: number) => void }) {
   return (
-    <li>
+    <li className="item-enter">
       <button
         type="button"
         aria-current={active}

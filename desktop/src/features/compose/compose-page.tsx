@@ -31,7 +31,7 @@ export function ComposePage() {
         <h1 className="text-xl font-semibold">Compose</h1>
         <p className="text-muted-foreground text-sm">Write templates, let the local model add a one-sentence opener per lead, then read and approve every draft. Nothing sends without your approval.</p>
       </header>
-      {campaigns.isPending ? <Skeleton className="h-12 w-96" aria-label="Loading campaigns" /> : campaigns.isError ? (
+      {campaigns.isPending ? <Skeleton className="h-12 w-96" role="status" aria-label="Loading campaigns" /> : campaigns.isError ? (
         <Alert variant="destructive" role="alert"><AlertDescription className="flex items-center gap-3">
           {campaigns.error instanceof ApiError ? campaigns.error.detail : 'Could not load campaigns.'}
           <Button size="xs" variant="outline" onClick={() => void campaigns.refetch()}>Retry</Button>

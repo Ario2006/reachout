@@ -26,7 +26,12 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
           <SheetDescription id="lead-drawer-desc">Details, source and activity for this lead.</SheetDescription>
         </SheetHeader>
         {lead.isPending ? <div className="space-y-3 p-4"><Skeleton className="h-8" /><Skeleton className="h-24" /></div>
-          : lead.isError ? <p className="text-destructive p-4 text-sm" role="alert">Could not load this lead.</p>
+          : lead.isError ? (
+            <div className="space-y-2 p-4" role="alert">
+              <p className="text-destructive text-sm">Could not load this lead. {lead.error instanceof ApiError ? lead.error.detail : ''}</p>
+              <Button size="sm" variant="outline" onClick={() => void lead.refetch()}>Retry</Button>
+            </div>
+          )
             : <DrawerBody key={`${lead.data.id}-${lead.data.updated_at}`} lead={lead.data} />}
       </SheetContent>
     </Sheet>

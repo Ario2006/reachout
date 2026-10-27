@@ -19,7 +19,7 @@ export function ProfilePanel() {
   const [fields, setFields] = useState<ProfileField[]>([])
   useEffect(() => { if (profile.data) setFields(profile.data.fields) }, [profile.data])
 
-  if (profile.isPending) return <div className="space-y-2" aria-label="Loading profile"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>
+  if (profile.isPending) return <div className="space-y-2" role="status" aria-label="Loading profile"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>
   if (profile.isError) {
     return <Alert variant="destructive" role="alert"><AlertDescription className="flex items-center gap-3">
       {profile.error instanceof ApiError ? profile.error.detail : 'Could not load your profile.'}

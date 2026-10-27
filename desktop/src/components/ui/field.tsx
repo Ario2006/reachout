@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { createContext, useContext, useId, useMemo } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
@@ -67,12 +67,25 @@ const fieldVariants = cva(
   }
 )
 
+interface FieldIds { description: string; error: string }
+const FieldIdsContext = createContext<FieldIds | null>(null)
+
+/** Inputs inside a <Field> call this to point aria-describedby at the field's hint and, when invalid, its error. */
+function useFieldDescribedBy(explicit: string | undefined, invalid: boolean | "true" | "false" | "grammar" | "spelling" | undefined): string | undefined {
+  const ids = useContext(FieldIdsContext)
+  if (explicit !== undefined || ids === null) return explicit
+  return invalid === true || invalid === "true" ? `${ids.description} ${ids.error}` : ids.description
+}
+
 function Field({
   className,
   orientation = "vertical",
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+  const base = useId()
+  const ids = useMemo(() => ({ description: `${base}-desc`, error: `${base}-err` }), [base])
   return (
+    <FieldIdsContext.Provider value={ids}>
     <div
       role="group"
       data-slot="field"
@@ -80,6 +93,7 @@ function Field({
       className={cn(fieldVariants({ orientation }), className)}
       {...props}
     />
+    </FieldIdsContext.Provider>
   )
 }
 
@@ -127,8 +141,10 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+  const ids = useContext(FieldIdsContext)
   return (
     <p
+      id={ids?.description}
       data-slot="field-description"
       className={cn(
         "text-left text-sm leading-normal font-normal text-muted-foreground group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5",
@@ -179,6 +195,7 @@ function FieldError({
 }: React.ComponentProps<"div"> & {
   errors?: Array<{ message?: string } | undefined>
 }) {
+  const ids = useContext(FieldIdsContext)
   const content = useMemo(() => {
     if (children) {
       return children
@@ -212,6 +229,7 @@ function FieldError({
 
   return (
     <div
+      id={ids?.error}
       role="alert"
       data-slot="field-error"
       className={cn("text-sm font-normal text-destructive", className)}
@@ -223,6 +241,7 @@ function FieldError({
 }
 
 export {
+  useFieldDescribedBy,
   Field,
   FieldLabel,
   FieldDescription,

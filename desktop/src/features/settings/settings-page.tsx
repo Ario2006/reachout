@@ -31,7 +31,7 @@ export function SettingsPage() {
     <div className="mx-auto w-full max-w-3xl px-8 pt-2 pb-16">
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Settings</h1>
       {settings.isPending ? (
-        <div className="space-y-3" aria-label="Loading settings"><Skeleton className="h-9 w-2/3" /><Skeleton className="h-40" /></div>
+        <div className="space-y-3" role="status" aria-label="Loading settings"><Skeleton className="h-9 w-2/3" /><Skeleton className="h-40" /></div>
       ) : settings.isError ? (
         <div className="space-y-3" role="alert">
           <p className="text-destructive text-sm">

@@ -96,6 +96,13 @@ export function DiscoverPage() {
 
       {shown !== null ? <RunProgress key={shown} runId={shown} /> : null}
 
+      {runs.isError ? (
+        <div role="alert" className="flex items-center gap-3 text-sm">
+          <p className="text-destructive">Could not load your past searches. {runs.error instanceof ApiError ? runs.error.detail : ''}</p>
+          <Button size="sm" variant="outline" onClick={() => void runs.refetch()}>Retry</Button>
+        </div>
+      ) : null}
+
       {runs.data && runs.data.length > 0 ? (
         <section aria-label="Past searches" className="space-y-2">
           <h2 className="text-sm font-medium">Past searches</h2>
@@ -103,7 +110,7 @@ export function DiscoverPage() {
             {runs.data.slice(0, 8).map((r) => (
               <li key={r.id}>
                 <button type="button" onClick={() => setSelected(r.id)} aria-current={shown === r.id ? 'true' : undefined}
-                  className="hover:bg-muted/50 flex w-full items-center gap-3 px-3 py-2 text-left text-sm outline-none focus-visible:ring-2">
+                  className="hover:bg-muted/50 flex w-full items-center gap-3 px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <span className="min-w-0 flex-1 truncate">{r.request_text}</span>
                   <Badge variant="outline" className="capitalize">{r.state}</Badge>
                   <span className="text-muted-foreground w-24 text-right text-xs tabular-nums">{r.leads_found} leads</span>
