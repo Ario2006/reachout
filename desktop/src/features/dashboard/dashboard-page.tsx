@@ -45,7 +45,7 @@ function KpiRow({ k }: { k: Metrics['kpis'] }) {
 
 const SEVERITY = {
   info: { icon: Info, cls: 'text-muted-foreground' },
-  warning: { icon: AlertTriangle, cls: 'text-amber-600 dark:text-amber-400' },
+  warning: { icon: AlertTriangle, cls: 'text-amber-700 dark:text-amber-400' },
   critical: { icon: AlertCircle, cls: 'text-destructive' },
 } as const
 
@@ -110,7 +110,7 @@ export function DashboardPage() {
       </header>
 
       {metrics.isPending ? (
-        <div className="space-y-4" aria-label="Loading metrics">
+        <div className="space-y-4" role="status" aria-label="Loading metrics">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-20" />)}</div>
           <Skeleton className="h-52" />
         </div>
@@ -128,7 +128,7 @@ export function DashboardPage() {
             <Card>
               <CardHeader><CardTitle>Recent activity</CardTitle></CardHeader>
               <CardContent>
-                {activity.isPending ? <div className="space-y-2" aria-label="Loading activity">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-5" />)}</div>
+                {activity.isPending ? <div className="space-y-2" role="status" aria-label="Loading activity">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-5" />)}</div>
                   : activity.isError ? <ErrorBox what="the activity feed" error={activity.error} onRetry={() => void activity.refetch()} />
                     : <Feed items={activity.data} />}
               </CardContent>

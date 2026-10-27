@@ -48,7 +48,7 @@ export function FollowupsSection({ campaign }: { campaign: Campaign }) {
   const awaiting = plan.data?.counts['awaiting_approval'] ?? 0
   let body: React.ReactNode
   if (plan.isPending) {
-    body = <div className="space-y-2" aria-label="Loading follow-ups" data-testid="followups-loading"><Skeleton className="h-16 w-full" /><Skeleton className="h-24 w-full" /></div>
+    body = <div className="space-y-2" role="status" aria-label="Loading follow-ups" data-testid="followups-loading"><Skeleton className="h-16 w-full" /><Skeleton className="h-24 w-full" /></div>
   } else if (plan.isError) {
     const unavailable = isFollowupsUnavailable(plan.error)
     body = (

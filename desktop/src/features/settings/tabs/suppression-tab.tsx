@@ -46,7 +46,7 @@ export function SuppressionTab() {
       </div>
 
       {list.isPending ? (
-        <div className="space-y-2" aria-label="Loading"><Skeleton className="h-9" /><Skeleton className="h-9" /></div>
+        <div className="space-y-2" role="status" aria-label="Loading suppression list"><Skeleton className="h-9" /><Skeleton className="h-9" /></div>
       ) : list.isError ? (
         <div className="text-destructive flex items-center gap-3 text-sm" role="alert">
           Could not load the list.

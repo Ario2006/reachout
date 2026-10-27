@@ -44,7 +44,7 @@ export function CampaignDetail({ id }: { id: number }) {
   const [askStart, setAskStart] = useState(false)
 
   if (campaign.isLoading) {
-    return <div className="space-y-4 p-6" aria-label="Loading campaign"><Skeleton className="h-8 w-1/2" /><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div>
+    return <div className="space-y-4 p-6" role="status" aria-label="Loading campaign"><Skeleton className="h-8 w-1/2" /><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div>
   }
   if (campaign.error || !campaign.data) {
     return (

@@ -88,7 +88,7 @@ export function CampaignsPage() {
           <Button size="sm" onClick={() => setCreating(true)}><Plus aria-hidden /> New</Button>
         </div>
         {list.isLoading ? (
-          <div className="space-y-2" aria-label="Loading campaigns"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
+          <div className="space-y-2" role="status" aria-label="Loading campaigns"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
         ) : list.error ? (
           <div role="alert" className="space-y-2 text-sm">
             <p className="text-destructive">Could not load campaigns: {list.error instanceof ApiError ? list.error.detail : 'unknown error'}.</p>

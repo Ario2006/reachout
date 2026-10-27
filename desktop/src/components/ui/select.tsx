@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { cn } from "cn"
+import { useFieldDescribedBy } from "@/components/ui/field"
 import { Select as SelectPrimitive } from "radix-ui"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
@@ -34,12 +35,15 @@ function SelectTrigger({
   className,
   size = "default",
   children,
+  "aria-describedby": describedBy,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default"
 }) {
+  const described = useFieldDescribedBy(describedBy, props["aria-invalid"])
   return (
     <SelectPrimitive.Trigger
+      aria-describedby={described}
       data-slot="select-trigger"
       data-size={size}
       className={cn(

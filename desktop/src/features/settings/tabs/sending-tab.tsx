@@ -61,7 +61,7 @@ export function SendingTab({ data }: { data: SettingsResponse }) {
               first five sending days.
             </FieldDescription>
             {typeof cap === 'number' && cap > 25 ? (
-              <p className="text-sm text-amber-600 dark:text-amber-400" role="status">
+              <p className="text-sm text-amber-700 dark:text-amber-400" role="status">
                 Above the safe default of 25. New Gmail accounts can be throttled.
               </p>
             ) : null}

@@ -1,5 +1,6 @@
 import { Menu, type MenuItemConstructorOptions, app } from 'electron'
 import type { MenuAction } from '../shared/bridge'
+import { GO_ROUTES } from '../shared/go-routes'
 
 interface MenuDeps {
   isDev: boolean
@@ -37,6 +38,10 @@ export function buildMenu({ isDev, send, showLogs, openDataFolder }: MenuDeps): 
           ? ([{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }] as MenuItemConstructorOptions[])
           : []),
       ],
+    },
+    {
+      label: 'Go',
+      submenu: GO_ROUTES.map((g, i) => ({ label: g.label, accelerator: `Cmd+${i + 1}`, click: () => send({ type: 'navigate', route: g.route }) })),
     },
     { role: 'windowMenu' },
     {

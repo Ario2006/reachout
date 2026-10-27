@@ -242,6 +242,7 @@ function YouStep(props: {
               checked={field.value === true}
               onCheckedChange={(c) => field.onChange(c === true)}
               aria-invalid={!!errors.legal}
+              aria-describedby={errors.legal ? 'w-legal-error' : undefined}
             />
           )}
         />
@@ -249,7 +250,7 @@ function YouStep(props: {
           I have read this and will follow these rules.
         </FieldLabel>
       </Field>
-      <FieldError errors={[errors.legal]} />
+      <FieldError id="w-legal-error" errors={[errors.legal]} />
       <div className="flex justify-between">
         <Button type="button" variant="ghost" onClick={props.onBack}>Back</Button>
         <Button type="submit">Continue</Button>

@@ -18,7 +18,7 @@ export function FunnelChart({ funnel }: { funnel: Funnel }) {
           <li key={f.stage} className="grid grid-cols-[5.5rem_1fr_3rem] items-center gap-3 text-sm">
             <span className="text-muted-foreground">{STAGE_LABEL[f.stage]}</span>
             <div className="bg-muted h-4 overflow-hidden rounded-r-sm" aria-hidden>
-              <div className="bg-primary h-full rounded-r-[4px]" style={{ width: `${(f.count / max) * 100}%`, opacity: 1 - i * 0.08 }} />
+              <div className="bg-primary h-full rounded-r-[4px]" style={{ width: `${(f.count / max) * 100}%`, opacity: 1 - i * 0.06 }} />
             </div>
             <span className="text-right font-medium tabular-nums">{f.count.toLocaleString()}</span>
           </li>
@@ -55,7 +55,7 @@ export function SendsChart({ days }: { days: PerDay }) {
   const total = days.reduce((s, d) => s + d.sent, 0)
   return (
     <figure aria-label="Emails sent per day">
-      <div className="text-muted-foreground mb-1 h-5 text-xs" aria-live="polite" data-testid="sends-readout">
+      <div className="text-muted-foreground mb-1 h-5 text-xs" data-testid="sends-readout">
         {hovered ? `${shortDay(hovered.day)}: ${hovered.sent} sent, ${hovered.replies} replies, ${hovered.bounces} bounces` : `${total.toLocaleString()} emails in this period`}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Emails sent per day, ${total} in total`}>
@@ -83,7 +83,7 @@ export function SendsChart({ days }: { days: PerDay }) {
       </svg>
       <table className="sr-only">
         <caption>Emails sent per day</caption>
-        <thead><tr><th>Day</th><th>Sent</th><th>Replies</th><th>Bounces</th></tr></thead>
+        <thead><tr><th scope="col">Day</th><th scope="col">Sent</th><th scope="col">Replies</th><th scope="col">Bounces</th></tr></thead>
         <tbody>{days.map((d) => <tr key={d.day}><td>{d.day}</td><td>{d.sent}</td><td>{d.replies}</td><td>{d.bounces}</td></tr>)}</tbody>
       </table>
     </figure>

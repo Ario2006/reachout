@@ -33,7 +33,7 @@ export function TemplatesPanel() {
   const current = selected === 'new' ? null : list.find((t) => t.id === selected) ?? (selected === null ? list[0] ?? null : null)
   const editorKey = selected === 'new' ? 'new' : String(current?.id ?? 'none')
 
-  if (templates.isPending) return <div className="space-y-2" aria-label="Loading templates"><Skeleton className="h-10" /><Skeleton className="h-64" /></div>
+  if (templates.isPending) return <div className="space-y-2" role="status" aria-label="Loading templates"><Skeleton className="h-10" /><Skeleton className="h-64" /></div>
   if (templates.isError) {
     return <Alert variant="destructive" role="alert"><AlertDescription className="flex items-center gap-3">
       {templates.error instanceof ApiError ? templates.error.detail : 'Could not load templates.'}
@@ -134,7 +134,7 @@ function TemplateEditor({ template, onSaved, onDeleted }: EditorProps) {
           </div>
           <Textarea id="tpl-body" ref={bodyRef} rows={12} value={form.body} maxLength={4000} className="font-mono text-sm" onFocus={() => { focus.current = 'body' }} onChange={(e) => setForm({ ...form, body: e.target.value })} />
           <p className="text-muted-foreground text-xs"><code>{'{{custom_opener}}'}</code> is the one or two sentences the local model writes for each lead. Everything else is your text. Plain text only; the opt-out footer is added when sending.</p>
-          {unknown.length > 0 ? <p className="text-xs text-amber-600" role="status">Not defined yet: {unknown.map((k) => `{{${k}}}`).join(', ')}. Add {unknown.length === 1 ? 'it' : 'them'} on the Profile tab or drafts will be flagged.</p> : null}
+          {unknown.length > 0 ? <p className="text-xs text-amber-700 dark:text-amber-400" role="status">Not defined yet: {unknown.map((k) => `{{${k}}}`).join(', ')}. Add {unknown.length === 1 ? 'it' : 'them'} on the Profile tab or drafts will be flagged.</p> : null}
         </div>
         <details className="text-sm">
           <summary className="text-muted-foreground cursor-pointer">Follow-up texts (used in a later step)</summary>

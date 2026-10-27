@@ -1,14 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Compass, FolderOpen, MonitorCog, RefreshCw, ScrollText, Search, Settings, Users } from 'lucide-react'
+import { FolderOpen, Inbox, MonitorCog, PauseCircle, PlayCircle, Plus, RefreshCw, ScrollText, Search, Settings, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
-  Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
+  Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut,
 } from '@/components/ui/command'
-import { api } from '@/lib/api/client'
+import { api, ApiError } from '@/lib/api/client'
 import { qk } from '@/lib/api/hooks'
+import { useSendingStatus, useSetPauseAll } from '@/lib/api/hooks-campaigns'
+import { useCheckNow } from '@/lib/api/hooks-inbox'
 import { useTheme } from '@/lib/theme'
 import { SETTINGS_TABS } from '@/features/settings/settings-page'
+import { NAV } from './nav'
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
@@ -17,6 +21,10 @@ export function CommandPalette() {
   const qc = useQueryClient()
   const { preference, setPreference } = useTheme()
   const bridge = window.reachout
+  const sending = useSendingStatus()
+  const setPaused = useSetPauseAll()
+  const checkNow = useCheckNow()
+  const pausedAll = sending.data?.paused_all
   const term = typed.trim()
   const found = useQuery({
     queryKey: ['palette-leads', term],
@@ -42,10 +50,11 @@ export function CommandPalette() {
   )
 
   const run = (fn: () => void) => () => { setOpen(false); fn() }
+  const failure = (fallback: string) => (e: unknown) => toast.error(e instanceof ApiError ? e.detail : fallback)
   const nextTheme = preference === 'system' ? 'light' : preference === 'light' ? 'dark' : 'system'
 
   return (
-    <CommandDialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setTyped("") }} title="Command palette" description="Jump to a screen or run an action">
+    <CommandDialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setTyped('') }} title="Command palette" description="Jump to a screen or run an action">
       <Command>
       <CommandInput placeholder="Type a command, or search leads by name, email or company…" value={typed} onValueChange={setTyped} />
       <CommandList>
@@ -64,9 +73,12 @@ export function CommandPalette() {
           </CommandGroup>
         ) : null}
         <CommandGroup heading="Go to">
-          <CommandItem onSelect={run(() => navigate('/discover'))}><Compass aria-hidden /> Discover: new search</CommandItem>
-          <CommandItem onSelect={run(() => navigate('/leads'))}><Users aria-hidden /> Leads</CommandItem>
-          <CommandItem onSelect={run(() => navigate('/settings'))}><Settings aria-hidden /> Settings</CommandItem>
+          {NAV.map((n, i) => (
+            <CommandItem key={n.id} value={`go to ${n.label}`} onSelect={run(() => navigate(n.to))}>
+              <n.icon aria-hidden /> {n.label}
+              <CommandShortcut>⌘{i + 1}</CommandShortcut>
+            </CommandItem>
+          ))}
           {SETTINGS_TABS.filter((t) => t.value !== 'account').map((t) => (
             <CommandItem key={t.value} onSelect={run(() => navigate(`/settings?tab=${t.value}`))}>
               <Settings aria-hidden /> Settings: {t.label}
@@ -75,6 +87,29 @@ export function CommandPalette() {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Actions">
+          <CommandItem value="new search discover" onSelect={run(() => navigate('/discover'))}><Plus aria-hidden /> New search</CommandItem>
+          <CommandItem value="check inbox now" onSelect={run(() => checkNow.mutate(undefined, {
+            onSuccess: () => toast.success('Checking Gmail for replies and bounces'),
+            onError: failure('Could not start the inbox check'),
+          }))}>
+            <Inbox aria-hidden /> Check inbox now
+          </CommandItem>
+          {pausedAll !== true ? (
+            <CommandItem value="pause sending" onSelect={run(() => setPaused.mutate(true, {
+              onSuccess: () => toast.success('Sending paused for every campaign'),
+              onError: failure('Could not pause sending'),
+            }))}>
+              <PauseCircle aria-hidden /> Pause sending
+            </CommandItem>
+          ) : null}
+          {pausedAll !== false ? (
+            <CommandItem value="resume sending" onSelect={run(() => setPaused.mutate(false, {
+              onSuccess: () => toast.success('Sending resumed'),
+              onError: failure('Could not resume sending'),
+            }))}>
+              <PlayCircle aria-hidden /> Resume sending
+            </CommandItem>
+          ) : null}
           <CommandItem onSelect={run(() => setPreference(nextTheme))}>
             <MonitorCog aria-hidden /> Switch theme (now {preference}, next {nextTheme})
           </CommandItem>

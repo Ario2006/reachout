@@ -38,7 +38,7 @@ export function ThreadView({ leadId }: { leadId: number }) {
   }, [unread, qc, leadId])
 
   if (thread.isPending) {
-    return <div className="space-y-3 p-6" aria-label="Loading conversation"><Skeleton className="h-10 w-1/2" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
+    return <div className="space-y-3 p-6" role="status" aria-label="Loading conversation"><Skeleton className="h-10 w-1/2" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
   }
   if (thread.isError) {
     return (
