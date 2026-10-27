@@ -6118,7 +6118,7 @@
     },
     "/inbox/check-now": {
       "post": {
-        "description": "Starts the `inbox_check` job (the same code the 10-minute poller runs).",
+        "description": "Starts the `inbox_check` job (the same code the poller runs). A check that is already queued or running is\nreturned instead of starting a second one.",
         "operationId": "check_now_inbox_check_now_post",
         "responses": {
           "202": {

@@ -501,7 +501,8 @@ export interface paths {
         put?: never;
         /**
          * Check Now
-         * @description Starts the `inbox_check` job (the same code the 10-minute poller runs).
+         * @description Starts the `inbox_check` job (the same code the poller runs). A check that is already queued or running is
+         *     returned instead of starting a second one.
          */
         post: operations["check_now_inbox_check_now_post"];
         delete?: never;
