@@ -1,7 +1,8 @@
 import { pathToFileURL } from 'node:url'
-import { join, resolve, sep } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve, sep } from 'node:path'
 import {
-  BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, net, protocol, session, shell,
+  BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, net, protocol, screen, session, shell,
   type IpcMainInvokeEvent,
 } from 'electron'
 import { CH, type AppInfo, type BackendStatus, type MenuAction, type ThemePreference } from '../shared/bridge'
@@ -13,6 +14,7 @@ import { dataDir, logsDir, pythonPath, repoRoot } from './paths'
 import { SendingMonitor } from './sending-monitor'
 import { splashHtml } from './splash'
 import { TrayController } from './tray'
+import { fitToDisplays, parseSaved, type SavedWindow } from '../shared/window-state'
 import { closeAction, isSending, IDLE, type SendingSnapshot } from '../shared/sending-guard'
 
 const DEV_URL = process.env['ELECTRON_RENDERER_URL'] ?? null
@@ -100,18 +102,53 @@ function createSplash(): BrowserWindow {
   return w
 }
 
+const windowStateFile = (): string => join(dataDir(), 'window-state.json')
+
+function loadWindowState(): SavedWindow | null {
+  try {
+    const file = windowStateFile()
+    if (!existsSync(file)) return null
+    return fitToDisplays(parseSaved(JSON.parse(readFileSync(file, 'utf8')) as unknown), screen.getAllDisplays().map((d) => d.workArea))
+  } catch {
+    return null // unreadable or corrupt: start with the default size
+  }
+}
+
+function saveWindowState(w: BrowserWindow): void {
+  try {
+    if (w.isDestroyed() || w.isMinimized() || w.isFullScreen()) return
+    const state: SavedWindow = { ...w.getNormalBounds(), maximized: w.isMaximized() }
+    mkdirSync(dirname(windowStateFile()), { recursive: true })
+    writeFileSync(windowStateFile(), JSON.stringify(state))
+  } catch (e) {
+    log('warn', `could not save the window position: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
 function createMainWindow(): BrowserWindow {
+  const saved = loadWindowState()
   const w = new BrowserWindow({
-    width: 1240, height: 820, minWidth: 960, minHeight: 620, show: false,
+    width: saved?.width ?? 1240, height: saved?.height ?? 820, minWidth: 960, minHeight: 620, show: false,
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 18 },
     vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000',
     webPreferences,
   })
+  if (saved?.maximized) w.maximize()
+  let saveTimer: NodeJS.Timeout | null = null
+  const saveSoon = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => saveWindowState(w), 500)
+  }
+  w.on('resize', saveSoon)
+  w.on('move', saveSoon)
   w.once('ready-to-show', () => {
     w.show()
     splashWin?.close()
   })
   w.on('close', (event) => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveWindowState(w)
     if (closeAction(isSending(lastSending), quitting) === 'hide') {
       event.preventDefault()  // keep sending: hide to the menu bar instead of quitting
       w.hide()

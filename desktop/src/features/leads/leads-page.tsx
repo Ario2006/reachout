@@ -88,9 +88,10 @@ export function LeadsPage() {
     setAllMatching(false)
     setSelected(on ? new Set(rows.map((r) => r.id)) : new Set())
   }, [rows])
+  const patchLead = patch.mutateAsync // stable across renders, so memoised table rows are not invalidated
   const onEdit = useCallback(async (id: number, p: LeadPatch) => {
-    try { await patch.mutateAsync({ id, patch: p }) } catch (e) { toast.error(e instanceof ApiError ? e.detail : 'Could not save') }
-  }, [patch])
+    try { await patchLead({ id, patch: p }) } catch (e) { toast.error(e instanceof ApiError ? e.detail : 'Could not save') }
+  }, [patchLead])
 
   const filtered = hasFilters(query)
   const run = runs.data?.find((r) => r.id === query.run_id)

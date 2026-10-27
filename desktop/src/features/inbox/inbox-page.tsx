@@ -1,5 +1,5 @@
 import { Inbox as InboxIcon, Loader2, RefreshCw, Search } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -46,10 +46,10 @@ function CheckStatus() {
   )
 }
 
-function ThreadRow({ t, selected, onSelect }: { t: ThreadSummary; selected: boolean; onSelect: () => void }) {
+const ThreadRow = memo(function ThreadRow({ t, selected, onSelect }: { t: ThreadSummary; selected: boolean; onSelect: (leadId: number) => void }) {
   return (
     <li>
-      <button type="button" onClick={onSelect} aria-current={selected ? 'true' : undefined} data-testid="thread-row"
+      <button type="button" onClick={() => onSelect(t.lead.id)} aria-current={selected ? 'true' : undefined} data-testid="thread-row"
         className={cn('hover:bg-muted/60 focus-visible:ring-ring w-full border-b px-3 py-2.5 text-left outline-none focus-visible:ring-2', selected && 'bg-muted')}>
         <div className="flex items-center gap-2">
           {t.unread > 0 && <span className="bg-primary size-2 shrink-0 rounded-full" aria-label={`${t.unread} unread`} />}
@@ -68,7 +68,7 @@ function ThreadRow({ t, selected, onSelect }: { t: ThreadSummary; selected: bool
       </button>
     </li>
   )
-}
+})
 
 export function InboxPage() {
   const [sp, setSp] = useSearchParams()
@@ -91,6 +91,10 @@ export function InboxPage() {
     for (const [k, v] of Object.entries(patch)) { if (v === null) next.delete(k); else next.set(k, v) }
     setSp(next, { replace: true })
   }
+  // A stable callback keeps memoised rows from re-rendering when only the selection changes.
+  const setLatest = useRef(set)
+  useEffect(() => { setLatest.current = set })
+  const select = useCallback((leadId: number) => setLatest.current({ lead: String(leadId) }), [])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -131,7 +135,7 @@ export function InboxPage() {
                 {filter === 'all' && !q ? <p>No conversations yet. Replies and bounces show up here once emails go out and Gmail is checked.</p> : <p>Nothing matches this filter.</p>}
               </div>
             ) : (
-              <ul>{items.map((t) => <ThreadRow key={t.lead.id} t={t} selected={t.lead.id === selected} onSelect={() => set({ lead: String(t.lead.id) })} />)}</ul>
+              <ul>{items.map((t) => <ThreadRow key={t.lead.id} t={t} selected={t.lead.id === selected} onSelect={select} />)}</ul>
             )}
           </div>
         </section>

@@ -124,8 +124,10 @@ export function LeadsTable({ rows, sorting, onSortingChange, columnVisibility, s
     state: { sorting, columnVisibility }, onSortingChange,
   })
 
-  const visible = table.getVisibleLeafColumns().map((c) => c.id)
-  const grid = visible.map((id) => { const m = COLUMN_META[id]; return m && m.grow > 0 ? `minmax(${m.min}px, ${m.grow}fr)` : `${m?.min ?? 100}px` }).join(' ')
+  // Stable identity per visibility change, so memoised rows do not re-render when only the selection changes.
+  const visibleKey = table.getVisibleLeafColumns().map((c) => c.id).join(',')
+  const visible = useMemo(() => visibleKey.split(','), [visibleKey])
+  const grid = useMemo(() => visible.map((id) => { const m = COLUMN_META[id]; return m && m.grow > 0 ? `minmax(${m.min}px, ${m.grow}fr)` : `${m?.min ?? 100}px` }).join(' '), [visible])
   const minWidth = visible.reduce((n, id) => n + (COLUMN_META[id]?.min ?? 100) + 12, 24)
 
   const scroller = useRef<HTMLDivElement>(null)

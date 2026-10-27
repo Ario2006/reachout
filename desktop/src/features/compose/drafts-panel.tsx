@@ -1,5 +1,5 @@
 import { CheckCheck, Loader2, Search } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -154,28 +154,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
       ) : (
         <div className="grid min-h-[420px] flex-1 grid-cols-[minmax(240px,320px)_1fr] overflow-hidden rounded-lg border">
           <ul ref={listRef} className="divide-y overflow-y-auto" aria-label="Drafts" data-testid="draft-list">
-            {items.map((d) => {
-              const st = effective(d)
-              const active = d.id === selected?.id
-              return (
-                <li key={d.id}>
-                  <button
-                    type="button"
-                    aria-current={active}
-                    onClick={() => setSelectedId(d.id)}
-                    data-testid="draft-row"
-                    className={cn('hover:bg-muted/60 focus-visible:ring-ring w-full space-y-1 px-3 py-2 text-left outline-none focus-visible:ring-2', active && 'bg-muted', !OPEN.has(st) && 'opacity-70')}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">{d.lead.name ?? d.lead.email}</span>
-                      <DraftStatusBadge status={st} />
-                    </div>
-                    <p className="text-muted-foreground truncate text-xs">{d.kind !== 'initial' ? `${KIND_NAME[d.kind]} · ` : ''}{d.lead.company ?? d.lead.email}{d.subject ? ` · ${d.subject}` : ''}</p>
-                    {d.flags.length > 0 ? <div className="flex flex-wrap items-center gap-1"><FlagBadges flags={d.flags} max={2} /></div> : null}
-                  </button>
-                </li>
-              )
-            })}
+            {items.map((d) => <DraftRow key={d.id} d={d} st={effective(d)} active={d.id === selected?.id} onSelect={setSelectedId} />)}
           </ul>
           <div className="flex min-h-0 flex-col border-l">
             {selected ? (
@@ -209,6 +188,27 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
     </div>
   )
 }
+
+const DraftRow = memo(function DraftRow({ d, st, active, onSelect }: { d: DraftItem; st: DraftStatus; active: boolean; onSelect: (id: number) => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        aria-current={active}
+        onClick={() => onSelect(d.id)}
+        data-testid="draft-row"
+        className={cn('hover:bg-muted/60 focus-visible:ring-ring w-full space-y-1 px-3 py-2 text-left outline-none focus-visible:ring-2', active && 'bg-muted', !OPEN.has(st) && 'opacity-70')}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm font-medium">{d.lead.name ?? d.lead.email}</span>
+          <DraftStatusBadge status={st} />
+        </div>
+        <p className="text-muted-foreground truncate text-xs">{d.kind !== 'initial' ? `${KIND_NAME[d.kind]} · ` : ''}{d.lead.company ?? d.lead.email}{d.subject ? ` · ${d.subject}` : ''}</p>
+        {d.flags.length > 0 ? <div className="flex flex-wrap items-center gap-1"><FlagBadges flags={d.flags} max={2} /></div> : null}
+      </button>
+    </li>
+  )
+})
 
 function EmptyState({ tab, kind, hasAny, q }: { tab: Tab; kind: DraftKindFilter; hasAny: boolean; q: string }) {
   const text = q ? 'No drafts match your search.'
