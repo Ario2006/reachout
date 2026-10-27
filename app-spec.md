@@ -38,7 +38,7 @@ The mode picks the search strategy, which pages to crawl, which roles to prefer,
 | DB                                   | SQLite via SQLModel or SQLAlchemy (single file, migrations via simple versioned SQL)                              |
 | LLM                                  | `ollama` Python client, JSON-schema structured outputs                                                            |
 | Web search                           | `ddgs` (DuckDuckGo) as primary; optional local SearXNG URL in Settings                                            |
-| Fetching                             | `httpx` with a polite UA + `trafilatura` for text; Playwright (Chromium) only as fallback for JS-only pages       |
+| Fetching                             | `httpx.AsyncClient` (async, pooled) with an honest UA + `trafilatura` for text; Playwright (Chromium) as a lazy third tier for JS-only pages. Engine details in section 13 |
 | HTML parsing                         | `selectolax` or `beautifulsoup4`                                                                                  |
 | Local business source (service mode) | OpenStreetMap Overpass API (free, no key) — many businesses carry `website` / `contact:email` tags                |
 | Email validation                     | `email-validator` (syntax) + `dnspython` (MX lookup)                                                              |
@@ -176,6 +176,7 @@ reachout/
 
 1. **Skeleton:** repo, setup/run scripts, SQLite schema, Settings page, Keychain secret storage, first-run wizard (Ollama + Gmail checks).
 2. **Lead pipeline:** planner, discovery, crawler, extractor, validator, results table, CSV export/import. Test with the three example requests in section 1 and report how many leads each yields and what share are `published_personal`.
+   - **2b. Production-grade crawling and outreach engine (section 13):** async tiered crawler with a page cache, heuristics before the LLM, a pipelined and resumable run, lead scoring and provenance, and the send-safety core (no SMTP yet). Done before milestone 3.
 3. **Compose and review:** templates, hybrid opener generation, guardrails, draft review/approval UI.
 4. **Sending:** worker process, caps, delays, windows, test send, dry run, pause/resume, auto-pause on bounces.
 5. **Tracking:** IMAP poller, reply/bounce/auto-reply/opt-out detection, suppression list, dashboard.
@@ -190,7 +191,44 @@ reachout/
 - A test campaign to 3 of my own addresses sends, shows correct threading, detects my reply as `replied`, and detects a deliberate bad address as `bounced`.
 - Closing the browser tab mid-campaign does not stop sending; restarting the app resumes it.
 - No email is ever sent to a suppressed address (unit-tested).
+- Milestone 2b (section 13.D): the crawl, cache, memory and LLM-call targets are measured with `scripts/bench_crawl.py` and reported.
 - Unit tests cover: email extraction and de-obfuscation, MX validation, confidence labelling, guardrails, send cap/window logic, IMAP reply/bounce matching (with fixture `.eml` files), suppression enforcement.
+
+## 13. Production-grade crawling and outreach engine
+
+This section tightens sections 4.1 and 4.3 and wins where it conflicts with them. Behaviour, data-model, safety and legal rules elsewhere in this file are unchanged. Everything here is local and free: no paid services, no API keys, no Docker/Redis/Postgres.
+
+### 13.A Crawler
+
+1. **Async, many domains at once.** `httpx.AsyncClient` with connection pooling (HTTP/2 only if a benchmark shows it helps) and an `asyncio` worker pool. A **global concurrency limit** (default 30, setting 1-64) and a **per-domain limit of 1 concurrent request** with a 1-2 s delay, raised to the site's robots `Crawl-delay` when that is larger (honoured up to 10 s; a longer value means the domain is skipped for the run and the reason recorded). Parallelism comes from many domains, never from hammering one.
+2. **Tiered fetching ("waterfall").** (a) page-cache hit, (b) plain HTTP fetch, (c) Playwright only when the HTML has no usable content (a JS-only shell). Playwright is optional and lazy: one reused browser, at most 2 concurrent pages, images/fonts/media blocked, and the tier is skipped cleanly if the browser is not installed. The tier that served each URL is logged and counted.
+3. **SQLite page cache.** Fetched HTML/text keyed by URL hash with ETag, Last-Modified, `fetched_at` and a TTL (default 14 days). Conditional requests for stale entries; fresh pages are never refetched. `robots.txt` is cached per domain, and **negative results** (dead domains, no-MX domains, blocked domains, tripped circuit breakers) are cached with an expiry so repeat runs are fast.
+4. **Smart crawl planning.** Per domain: the homepage, then links to contact / about / team / people / careers / jobs / investors / portfolio / pitch pages discovered from the homepage and from `sitemap.xml` (including `Sitemap:` lines in robots.txt). At most 6 pages per domain (setting). Blind path guessing is a last resort (at most 3 guesses, only when nothing was discovered). The domain stops early once enough contacts are found.
+5. **Heuristics before the LLM.** Plain code first: emails, `mailto:` links, JSON-LD (`Person`, `Organization`), schema.org microdata, and obvious team-card HTML patterns. The local LLM is called **only** for pages where heuristics found an email or a team-like block but could not determine name or role. Short snippets are **batched** into one call, input capped at about 3,000 tokens, and LLM calls never run concurrently (a single queue). The stages (fetch, extract, LLM, validate, store) are connected by **bounded queues** so memory stays flat and the HTTP crawl keeps running while the LLM works.
+6. **Resilience.** Connect timeout 5 s, total deadline 15 s, 2 MB response cap, content-type checks. Retries (max 2) with exponential backoff and jitter on 429, 5xx and network errors, honouring `Retry-After`. A per-domain circuit breaker skips a domain after repeated failures. Redirects, odd encodings and malformed HTML never crash a job.
+7. **Resumable and cancellable.** Per-URL state is persisted in SQLite so an interrupted run continues where it stopped. Cancel takes effect within about 2 seconds, keeping everything found so far.
+8. **Observability.** Per-run stats saved to the DB, streamed live over SSE to the Discover screen and shown in the run summary: domains, pages by tier, cache hit rate, pages/sec, failures by reason, LLM calls and time, and time per stage.
+9. **Ethics and safety (unchanged, non-negotiable).** Respect robots.txt; an honest User-Agent that identifies Reachout and includes the contact URL or email from Settings (blank by default, with a warning; it is never defaulted to the user's own address); no LinkedIn, Facebook, Instagram or X; no logins; no CAPTCHA solving; no stealth or fingerprint evasion; no proxy rotation. If a site blocks us (403, 429, a CAPTCHA page), record it and move on.
+
+### 13.B Lead quality
+
+1. **Score 0-100** per lead from: email confidence label (`published_personal` > `published_generic` > `guessed`), name/email match, role match with the request, source page type, MX validity and freshness. The score and its reasons are stored; the Leads table can sort and filter by score.
+2. **Dedupe across runs** by email and by (name, domain). Sources are **merged**, not dropped. Provenance (source URL, page tier, `fetched_at`, run) is kept per lead.
+3. **Domain hygiene.** Disposable domains, the role-address blocklist (`noreply`, `abuse`, `privacy`, ...) and domains with no MX record are skipped.
+
+### 13.C Outreach engine (sending side)
+
+1. **Idempotent, crash-safe sending.** A message is marked `sending` in SQLite **before** the SMTP call and `sent` after. After a restart anything left in `sending` is **never resent automatically**; it becomes `needs_confirmation` and the user decides. A person must never receive the same email twice (enforced by a unique key per campaign, lead and kind, not only by checks).
+2. **Per-recipient-domain throttling.** At most 2 emails per company domain per day, and never to two people at one company within the same hour (both configurable).
+3. **Time zones.** Where a recipient time zone can be inferred (the plan's region or the country TLD), the send window is applied in that zone; otherwise in the sender's local time as in section 4.3.
+4. **Every existing safety rule stays**: daily caps and warm-up, delay jitter, send window, the 100/day ceiling, bounce auto-pause, suppression check at send time, approval required, opt-out footer.
+5. **Traceability.** Structured logging with a correlation id per lead and message, so any crawl or send decision can be traced from the UI ("why was this lead found / emailed?").
+6. **Scope note.** Milestone 2b builds the state machine, guards and tests without SMTP; milestone 4 connects `smtplib` to it.
+
+### 13.D Verification and targets
+
+- `scripts/bench_crawl.py` runs a fixed domain list reproducibly. Unit tests use recorded HTML fixtures (extractor, robots, cache, retry and circuit breaker, idempotent send including a simulated crash between `sending` and `sent`).
+- Targets on a normal home connection: crawl **200 domains (up to 6 pages each) in under 10 minutes** excluding LLM time; backend process peak RSS under about 1.5 GB; far fewer LLM calls per 100 leads than the one-call-per-page baseline (about 320). Report honestly if a number falls short, and why.
 
 ## 11. Out of scope for v1
 
