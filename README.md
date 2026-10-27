@@ -5,9 +5,10 @@ contact emails, drafts personalised emails with a small local LLM, and sends the
 batches **only after you approve them**. See `app-spec.md` (behaviour) and `ui-migration-spec.md`
 (desktop UI) for the full spec, and `ARCHITECTURE.md` for how it fits together.
 
-**Status:** Milestone 2b of the revised plan. Done: the desktop shell, first-run wizard, Settings, the
-lead pipeline (**Discover** and **Leads**), and the production-grade crawl engine and send-safety core (2b).
-Compose, Campaigns, Inbox and Dashboard appear in the sidebar as "Soon".
+**Status:** all feature milestones are built: Discover and Leads, Compose (templates, local-LLM openers, draft
+review), Campaigns (sending), Inbox and Dashboard (replies, bounces, opt-outs), and follow-ups. Packaging
+(`.dmg`) is the remaining step. Nothing has been sent to a real recipient by the automated tests; try a
+**Send test to myself** before your first real campaign.
 The previous Streamlit version is preserved at the git tag `streamlit-m1`.
 
 ## Requirements
@@ -102,13 +103,21 @@ default, with a warning, and never filled in from your Gmail address).
 
 Measured numbers (`scripts/bench_crawl.py`, no model): see [`docs/m2b-benchmarks.md`](docs/m2b-benchmarks.md).
 
-## Send safety (built ahead of sending)
+## How a campaign flows
 
-`backend/core/outbox.py` is the state machine the sender will use in milestone 4, tested without a mail server:
-one message per person per campaign (enforced by the database), an atomic claim that re-checks suppression, the
-daily cap (never above 100), at most 2 emails per company domain per day and 60 minutes between two people at one
-company, a send window judged in the recipient's time zone when it can be inferred, and crash recovery: an email
-caught between `sending` and `sent` becomes **needs confirmation** and is never resent automatically.
+Discover finds leads -> Compose writes one draft per lead (your template plus one short LLM-written opener,
+checked against the page it came from) -> you review and approve -> Campaigns: readiness checklist, **Send test to
+myself**, **Dry run**, **Start** -> the worker sends at most 25 a day (never above 100), 60 to 180 s apart, inside the
+send window, with the opt-out footer -> Reachout polls your Gmail every 10 minutes (read-only) and marks replies,
+bounces, out-of-office and opt-outs -> follow-ups (up to 2, day 4 and 9 by default) go to people who stayed silent.
+Opens are not tracked. The campaign auto-pauses when more than 5% bounce after at least 20 sends.
+
+## Send safety
+
+`backend/core/outbox.py` is the state machine behind the sender: one message per person per campaign (enforced by the
+database), an atomic claim that re-checks approval, suppression, the daily cap, per-company limits and the send window,
+and crash recovery: an email caught between `sending` and `sent` becomes **needs confirmation** and is never resent
+automatically. Editing an approved draft withdraws its approval.
 
 ## Where things live
 
@@ -121,7 +130,8 @@ caught between `sending` and `sent` becomes **needs confirmation** and is never 
 
 ## Safety rules (enforced in the backend, not just the UI)
 
-- Nothing sends without your approval (built in milestones 3 and 4).
+- Nothing sends without your approval, and editing a draft after approving it withdraws the approval.
+- Every email carries the opt-out footer (it cannot be switched off for service and investor campaigns).
 - A message is never sent twice, and one found mid-send after a crash waits for your confirmation.
 - The suppression list is always enforced. Bounce and opt-out entries can never be removed from the
   UI; entries you add by hand can, after typing the address to confirm.
@@ -132,7 +142,9 @@ caught between `sending` and `sent` becomes **needs confirmation** and is never 
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q                       # backend
+scripts/test-fast.sh                                # inner loop: only what you changed
+scripts/test-all.sh                                 # full gate: backend, frontend, types, lint, safety coverage (add --e2e for Playwright)
+.venv/bin/python -m pytest -q -n 2                  # backend only
 cd desktop && npm test                              # frontend unit/component tests (Vitest)
 cd desktop && npm run test:e2e                      # Electron tests (Playwright): shell, lifecycle, Discover and Leads
 PYTHONPATH=. .venv/bin/python scripts/bench_crawl.py   # crawl benchmark on a fixed list of 50 domains (real network, no model)

@@ -1,7 +1,7 @@
 # Architecture
 
 Reachout is a local macOS desktop app. Nothing leaves the machine except your outgoing email and
-polite web requests. This file describes the moving parts as built (through Milestone 2b).
+polite web requests. This file describes the moving parts as built (through follow-ups; packaging pending).
 
 ```
 ┌──────────────────────── Electron main process ────────────────────────┐
@@ -137,13 +137,27 @@ The UI follows a run through four SSE event types: `run` (stage, counters and th
 `run_log`, and `lead`. State is also in the database (`search_runs`, `run_domains`, `run_log`), so a reload rebuilds
 the screen.
 
-## Send safety
+## Sending, tracking and follow-ups
 
-`outbox` owns the message state machine (`queued → sending → sent | failed | needs_confirmation`). A unique index
-allows one message per (campaign, lead, kind). `claim` is one SQL statement that re-checks suppression, the daily cap,
-the per-company daily limit and the gap between people at one company; the worker marks any message left in `sending`
-as `needs_confirmation` on start and nothing ever resends it automatically. `tz` infers the recipient's zone from a
-country domain or the search region, so the send window applies where the reader is. SMTP itself arrives in milestone 4.
+All outside-world access goes through ports (`ports.py`: `Mailer`, `ImapClient`, `LlmClient`, `PageCache`, `Clock`)
+handed out by `services.get_services()`; tests swap in `fakes.py`, so no test ever touches SMTP, IMAP, Ollama or DNS.
+
+- **Compose** (`composer`, `personaliser`, `drafts`): Jinja2 template plus one LLM `custom_opener`, validated
+  (35 words, grounded in the stored snippet, no invented numbers, names or URLs); failures fall back to a neutral
+  opener and `needs_review`. Drafts never contain the footer; a DB trigger withdraws approval on any edit.
+- **Send** (`outbox`, `sender`, `mailer`, `campaigns`): `outbox` owns the message state machine
+  (`queued -> sending -> sent | failed | needs_confirmation | cancelled`) with a unique index per (campaign, lead,
+  kind). `claim` is one SQL statement re-checking approval, suppression, pause-all, the daily cap and 100/day
+  ceiling, per-company limits and spacing. `sender` adds jitter (`campaigns.next_send_at`), the send-time footer
+  (`footer.ensure_footer`), bounce auto-pause, SMTP-login stop and graceful shutdown. `tz` applies the window in the
+  recipient's zone when it can be inferred. Mid-send crashes become `needs_confirmation`, never auto-resent.
+- **Track** (`tracker`, `inbox_poller`, `threads`, `metrics`): read-only IMAP (`BODY.PEEK`, INBOX), replies matched by
+  `In-Reply-To`/`References`, DSN bounce parsing, auto-reply and opt-out detection, idempotent on the incoming
+  Message-ID, stronger lead statuses never overwritten by weaker ones.
+- **Follow-ups** (`followups`): due times are cumulative from the first email; each follow-up is an ordinary
+  `messages` row, held until its threading headers are set, so it passes through the same outbox checks.
+- Events `draft`, `campaign`, `message`, `inbox`, `sending` (`event_types.py`) are invalidation hints; the UI
+  refetches by query-key prefix (`desktop/src/lib/api/keys.ts`).
 
 ## Supervision
 

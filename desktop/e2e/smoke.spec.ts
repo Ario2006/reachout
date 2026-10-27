@@ -35,10 +35,16 @@ test.describe('app shell (wizard skipped)', () => {
   })
   test.afterAll(async () => { await app.close() })
 
-  test('sidebar shows 7 screens; Discover, Leads and Settings are enabled', async () => {
+  test('sidebar shows 7 enabled screens and each one opens without an error', async () => {
     const nav = page.getByRole('navigation', { name: 'Main' })
     await expect(nav.getByRole('link')).toHaveCount(7)
-    await expect(nav.locator('[aria-disabled="true"]')).toHaveCount(4) // Dashboard, Compose, Campaigns, Inbox
+    await expect(nav.locator('[aria-disabled="true"]')).toHaveCount(0)
+    for (const name of ['Dashboard', 'Compose', 'Campaigns', 'Inbox', 'Leads']) {
+      await nav.getByRole('link', { name }).click()
+      await expect(page.getByRole('link', { name, exact: true })).toHaveAttribute('aria-current', 'page')
+      await expect(page.getByText(/something went wrong|not built yet/i)).toHaveCount(0)
+    }
+    await nav.getByRole('link', { name: 'Discover' }).click()
     await expect(page.getByRole('heading', { name: 'Discover' })).toBeVisible() // the app opens on Discover
     await nav.getByRole('link', { name: 'Settings' }).click()
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()

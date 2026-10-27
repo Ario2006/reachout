@@ -1,6 +1,6 @@
 # Parallel plan: finishing Reachout (milestones 3 to 7)
 
-Status of this plan: **Phase 0 done, waiting for "go"** (see docs/STATE.md). Specs: `app-spec.md`, `ui-migration-spec.md`.
+Status of this plan: **complete except F2 packaging, which waits for the user's approval** (see docs/STATE.md). Specs: `app-spec.md`, `ui-migration-spec.md`.
 
 ## Audit result
 
