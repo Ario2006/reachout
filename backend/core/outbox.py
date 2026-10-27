@@ -355,10 +355,14 @@ def retry_failed(message_id: int, engine: Engine | None = None) -> bool:
     return bool(res.rowcount)
 
 
-def cancel(message_id: int, engine: Engine | None = None) -> bool:
+def cancel(message_id: int, reason: str = "", engine: Engine | None = None) -> bool:
+    """queued -> cancelled (it can never be sent, or the user withdrew it). `reason` is shown in the UI."""
     engine = engine or db.get_engine()
     with engine.begin() as c:
-        res = c.execute(text("UPDATE messages SET state='cancelled' WHERE id=:i AND state='queued'"), {"i": message_id})
+        res = c.execute(text("UPDATE messages SET state='cancelled', error=:e WHERE id=:i AND state='queued'"), {"i": message_id, "e": reason[:500] or None})
+        if res.rowcount:
+            t = c.execute(text("SELECT trace_id FROM messages WHERE id=:i"), {"i": message_id}).scalar()
+            _trace(c, t, "cancelled", (reason or "Cancelled")[:200])
     return bool(res.rowcount)
 
 

@@ -259,7 +259,8 @@ async function confirmQuitWhileSending(): Promise<boolean> {
     message: 'A campaign is sending.',
     detail: 'Quitting pauses all sending. You can resume it the next time you open Reachout.',
   }
-  const r = mainWin && !mainWin.isDestroyed() ? await dialog.showMessageBox(mainWin, opts) : await dialog.showMessageBox(opts)
+  // A hidden window cannot host a sheet (the dialog would never appear): use the parent-less variant then.
+  const r = mainWin && !mainWin.isDestroyed() && mainWin.isVisible() ? await dialog.showMessageBox(mainWin, opts) : await dialog.showMessageBox(opts)
   return r.response === 0
 }
 

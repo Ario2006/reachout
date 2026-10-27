@@ -281,7 +281,7 @@ def resume(campaign_id: int, engine: Engine | None = None) -> dict | None:
         _, bounced = bounce_stats(campaign_id, engine)
         _set_app_state(f"bounce_ack:{campaign_id}", str(bounced), engine)
     enqueue_approved(campaign_id, engine)
-    _set_state(campaign_id, engine, "running", only_from=("paused",), extra=", next_send_at=NULL")
+    _set_state(campaign_id, engine, "running", only_from=("paused",))  # next_send_at is kept: pausing never shortens the spacing
     publish_sending(engine)
     return get(campaign_id, engine)
 
@@ -314,14 +314,42 @@ def resume_all(engine: Engine | None = None) -> dict:
     with engine.connect() as c:
         ids = [r[0] for r in c.execute(text("SELECT id FROM campaigns WHERE state='paused' AND paused_by='all'"))]
     for i in ids:
-        _set_state(i, engine, "running", only_from=("paused",), extra=", next_send_at=NULL")
+        _set_state(i, engine, "running", only_from=("paused",))
     publish_sending(engine)
     return sending_status(engine)
 
 
-def reopen_if_done(campaign_id: int, engine: Engine) -> None:
-    """The user put an email back in the queue after the campaign finished: it should go out."""
-    _set_state(campaign_id, engine, "running", only_from=("done",), extra=", finished_at=NULL, next_send_at=NULL")
+def reopen_if_done(campaign_id: int, engine: Engine | None = None) -> bool:
+    """done -> running. For anything that adds work to a finished campaign (the user re-queued an email, the follow-up
+    task scheduled a follow-up): outbox refuses to send for a campaign that is not running."""
+    engine = engine or db.get_engine()
+    return _set_state(campaign_id, engine, "running", only_from=("done",), extra=", finished_at=NULL")
+
+
+def followups_pending(campaign_id: int, now: float, engine: Engine | None = None) -> bool:
+    """True while a follow-up may still be scheduled for this campaign, so the sender must not mark it done: follow-ups
+    are enabled and some person who got the first email (and is not suppressed, replied, bounced, opted out or closed)
+    has had fewer follow-ups than the plan, and the last follow-up window (plus a day) has not passed."""
+    engine = engine or db.get_engine()
+    with engine.connect() as c:
+        cp = c.execute(text("SELECT followups_enabled, followup_days_json FROM campaigns WHERE id=:i"), {"i": campaign_id}).first()
+        if cp is None or not cp[0]:
+            return False
+        days = [int(d) for d in json.loads(cp[1] or "[]")]
+        if not days:
+            return False
+        rows = c.execute(text(
+            "SELECT m.recipient_email, m.claimed_at, l.status, (SELECT COUNT(*) FROM messages f WHERE f.campaign_id = m.campaign_id AND f.lead_id = m.lead_id "
+            "AND f.kind != 'initial' AND f.state IN ('sent','needs_confirmation','failed','cancelled')) "
+            "FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.campaign_id=:c AND m.kind='initial' AND m.state='sent'"), {"c": campaign_id}).all()
+    horizon = (max(days) + 1) * 86400
+    for email, claimed_at, status, handled in rows:
+        if status in outbox.BLOCKING_LEAD_STATUS or handled >= len(days) or claimed_at is None or now > claimed_at + horizon:
+            continue
+        if db.is_suppressed(email, engine):
+            continue
+        return True
+    return False
 
 
 def sent_today(engine: Engine, now: float | None = None) -> int:
@@ -425,13 +453,15 @@ def test_send(campaign_id: int, engine: Engine | None = None) -> dict | None:
     mid = new_message_id(s.gmail_address)
     email = OutgoingEmail(from_addr=s.gmail_address, from_name=s.display_name, to_addr=s.gmail_address, subject=f"[Test] {d[0]}",
                           body=footer.ensure_footer(d[1], s, cp["mode"]), message_id=mid, attachment_path=cp.get("attachment_path") or None)
-    mailer = services.get_services().mailer()
+    mailer = None
     try:
+        mailer = services.get_services().mailer()  # may raise SmtpAuthError when the App Password is missing
         mailer.send(email)
     except MailerError as e:
         raise ControlRefused(f"The test email was not sent: {e}") from e
     finally:
-        mailer.close()
+        if mailer is not None:
+            mailer.close()
     with engine.begin() as c:
         c.execute(text("UPDATE campaigns SET test_sent_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=:i"), {"i": campaign_id})
     return {"to": s.gmail_address, "message_id": mid}

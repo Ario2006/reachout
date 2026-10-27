@@ -250,3 +250,17 @@ def test_bounce_pause_resume_only_trips_again_on_new_bounces(world):
     svc.fake_clock.advance(500)
     snd.tick()
     assert camp(engine, cid2)["paused_by"] == "bounce_rate"
+
+
+def test_test_send_without_an_app_password_is_a_409_not_a_500(world, client):
+    engine, svc = world
+    cid, _ = draft_campaign(engine)
+    approve_all(engine, cid)
+    from backend.core.ports import SmtpAuthError
+
+    def no_mailer():
+        raise SmtpAuthError("Gmail is not set up: add your address and App Password in Settings.")
+
+    svc.mailer = no_mailer
+    r = client.post(f"/campaigns/{cid}/test-send")
+    assert r.status_code == 409 and "App Password" in r.json()["detail"]

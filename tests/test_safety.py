@@ -323,8 +323,7 @@ def test_property_nobody_is_emailed_twice_or_when_suppressed_across_interleaving
         assert count <= 1 + not_sent.get(addr, 0), f"{addr} received {count} emails"
     times = sorted(t for t, *_ in log)
     for a, b in zip(times, times[1:]):
-        # (a "not sent" decision resets that message's claim, so its spacing is the user's call, not the sender's)
-        assert b - a >= 60 or not_sent, "two sends closer than the minimum delay"
+        assert b - a >= 60, "two sends closer than the minimum delay"
     days: dict[float, int] = {}
     dom_days: dict[tuple[float, str], int] = {}
     for t, addr, *_ in log:

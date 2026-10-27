@@ -4,9 +4,11 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { pluralize } from '@/lib/format'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ApiError } from '@/lib/api/client'
 import { useCampaign, useCampaignAction, useDryRun, useReadiness, useSendingStatus, useTestSend } from '@/lib/api/hooks-campaigns'
+import { ConfirmDialog } from './confirm-dialog'
 import { PauseBanner, RunProgress, StateBadge } from './campaign-status'
 import { DryRunDialog } from './dry-run-dialog'
 import { dryRunBlocker, startBlocker, testSendBlocker } from './helpers'
@@ -38,6 +40,7 @@ export function CampaignDetail({ id }: { id: number }) {
   const dry = useDryRun(id)
   const [jobId, setJobId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [askStart, setAskStart] = useState(false)
 
   if (campaign.isLoading) {
     return <div className="space-y-4 p-6" aria-label="Loading campaign"><Skeleton className="h-8 w-1/2" /><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div>
@@ -82,7 +85,7 @@ export function CampaignDetail({ id }: { id: number }) {
           </Guarded>
           {c.state === 'draft' ? (
             <Guarded reason={startReason}>
-              <Button disabled={startReason !== null || act.isPending} onClick={() => run('start')}><Play aria-hidden /> Start</Button>
+              <Button disabled={startReason !== null || act.isPending} onClick={() => setAskStart(true)}><Play aria-hidden /> Start</Button>
             </Guarded>
           ) : null}
           {c.state === 'running' ? <Button variant="secondary" disabled={act.isPending} onClick={() => run('pause')}><Pause aria-hidden /> Pause</Button> : null}
@@ -116,6 +119,21 @@ export function CampaignDetail({ id }: { id: number }) {
       <section data-slot="followups" aria-label="Follow-ups" className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
         Follow-up schedule: coming in a later update.
       </section>
+
+      <ConfirmDialog
+        open={askStart}
+        title="Start sending?"
+        confirmLabel="Start sending"
+        busy={act.isPending}
+        onCancel={() => setAskStart(false)}
+        onConfirm={() => { setAskStart(false); run('start') }}
+      >
+        <p data-testid="start-summary">
+          {pluralize(c.counts.drafts_approved, 'approved email')} will be queued: at most {c.daily_cap} a day, between {c.window_start} and {c.window_end},
+          {' '}{c.delay_min_s ?? 60} to {c.delay_max_s ?? 180} seconds apart (your Settings apply where this campaign has no override).
+        </p>
+        <p className="mt-2">Every email carries your opt-out footer. You can pause at any time.</p>
+      </ConfirmDialog>
 
       <DryRunDialog jobId={jobId} onClose={() => setJobId(null)} />
     </div>

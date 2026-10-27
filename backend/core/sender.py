@@ -33,7 +33,7 @@ from backend.core.ports import MailerError, OutgoingEmail, RecipientRejected, Sm
 
 log = logging.getLogger("reachout.sender")
 TICK_EVERY_S = 3
-MAX_TRANSIENT_TRIES = 3
+PAUSE_AFTER_TRANSIENT = 3  # consecutive "could not reach the server" errors before the campaign pauses itself
 TRANSIENT_BACKOFF_S = (60.0, 120.0, 300.0)
 TIME_REASONS = ("window", "daily_cap", "domain_daily_limit", "domain_gap", "not_before", "paused_all")  # "later", not "never"
 
@@ -48,7 +48,7 @@ class Sender:
         self._lock = threading.Lock()  # one tick at a time
         self.stopping = threading.Event()
         self._idle_until: dict[int, float] = {}
-        self._transient: dict[int, int] = {}
+        self._transient_run = 0  # consecutive transient errors since the last success
         self._caffeinate: subprocess.Popen | None = None
 
     # ------------------------------------------------------------------ tick
@@ -88,6 +88,7 @@ class Sender:
         if now < self._spacing_floor(cp, settings):
             return 0
         outbox.resync_snapshots(cid, self.engine)
+        self._cancel_unsendable(cid)
         ids = outbox.next_eligible(cid, now, settings, self.engine, limit=1)
         if not ids:
             if not self._finish_if_empty(cid):
@@ -118,11 +119,27 @@ class Sender:
             return True
         return False
 
+    def _cancel_unsendable(self, cid: int) -> None:
+        """Queued emails that can never go out (suppressed address, or a lead who replied, bounced, opted out or was
+        closed) are cancelled with a reason, so they neither linger nor keep the campaign from finishing."""
+        marks = ",".join(f"'{x}'" for x in outbox.BLOCKING_LEAD_STATUS)
+        with self.engine.connect() as c:
+            rows = c.execute(text(
+                "SELECT m.id, m.lead_id, m.kind, "
+                "CASE WHEN EXISTS (SELECT 1 FROM suppression s WHERE s.email = m.recipient_email) THEN 'This address is on the suppression list.' "
+                "ELSE 'The lead is marked ' || replace(l.status, '_', ' ') || '.' END "
+                f"FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.campaign_id=:c AND m.state='queued' "
+                f"AND (l.status IN ({marks}) OR EXISTS (SELECT 1 FROM suppression s WHERE s.email = m.recipient_email))"), {"c": cid}).all()
+        for mid, lead_id, kind, reason in rows:
+            if outbox.cancel(mid, reason, self.engine):
+                event_types.publish("message", event_types.MessageEvent(campaign_id=cid, lead_id=lead_id, message_id=mid, kind=kind, state="cancelled"), self.engine)
+
     def _finish_if_empty(self, cid: int) -> bool:
-        with self.engine.begin() as c:
+        with self.engine.connect() as c:
             left = c.execute(text("SELECT COUNT(*) FROM messages WHERE campaign_id=:c AND state IN ('queued','sending')"), {"c": cid}).scalar_one()
-            if left:
-                return False
+        if left or campaigns.followups_pending(cid, services.get_services().clock.now(), self.engine):
+            return False
+        with self.engine.begin() as c:
             res = c.execute(text("UPDATE campaigns SET state='done', finished_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'), next_send_at=NULL WHERE id=:c AND state='running'"), {"c": cid})
         if res.rowcount:
             campaigns.publish_campaign(cid, self.engine)
@@ -154,16 +171,25 @@ class Sender:
                 pass
 
     def _deliver(self, cp: dict, mid: int, attempt: str, settings: AppSettings, mailer) -> int:
-        msg = outbox.get_message(mid, self.engine) or {}
-        message_id = mailer_mod.new_message_id(settings.gmail_address)
-        outbox.set_message_id(mid, attempt, message_id, self.engine)
-        email = OutgoingEmail(
-            from_addr=settings.gmail_address, from_name=settings.display_name, to_addr=msg["recipient_email"], subject=msg["subject"] or "",
-            body=footer.ensure_footer(msg["body"] or "", settings, cp["mode"]), message_id=message_id,
-            in_reply_to=msg.get("in_reply_to") or None, references=tuple((msg.get("references_text") or "").split()),
-            attachment_path=cp["attachment_path"] or None)
-        self._publish_msg(msg, "sending")
-        delay = self._delay(cp, settings)
+        msg: dict = {}
+        delay = 0.0
+        try:  # everything before the SMTP call: a failure here means nothing was sent, so the claim is released
+            msg = outbox.get_message(mid, self.engine) or {}
+            message_id = mailer_mod.new_message_id(settings.gmail_address)
+            outbox.set_message_id(mid, attempt, message_id, self.engine)
+            email = OutgoingEmail(
+                from_addr=settings.gmail_address, from_name=settings.display_name, to_addr=msg["recipient_email"], subject=msg["subject"] or "",
+                body=footer.ensure_footer(msg["body"] or "", settings, cp["mode"]), message_id=message_id,
+                in_reply_to=msg.get("in_reply_to") or None, references=tuple((msg.get("references_text") or "").split()),
+                attachment_path=cp["attachment_path"] or None)
+            delay = self._delay(cp, settings)
+            # The next-send time is written BEFORE the call, so even a crash mid-send cannot lose the spacing.
+            self._schedule_next(cp["id"], delay)
+            self._publish_msg(msg, "sending")
+        except Exception:  # noqa: BLE001
+            log.exception("could not prepare message %s; releasing it", mid)
+            outbox.release(mid, attempt, "Not sent: the app could not prepare this email.", self.engine)
+            return 0
         try:
             receipt = mailer.send(email)
         except SmtpAuthError as e:
@@ -172,13 +198,17 @@ class Sender:
             self._stop_run(str(e))
             return 1
         except TransientSendError as e:
-            n = self._transient.get(mid, 0) + 1
-            self._transient[mid] = n
-            if n >= MAX_TRANSIENT_TRIES:
-                outbox.mark_failed(mid, attempt, f"Gave up after {n} tries: {e}", False, self.engine)
+            outbox.release(mid, attempt, str(e), self.engine)
+            self._transient_run += 1
+            if self._transient_run >= PAUSE_AFTER_TRANSIENT:
+                self._transient_run = 0
+                campaigns.pause(cp["id"], "smtp_login", f"Paused automatically: Gmail could not be reached {PAUSE_AFTER_TRANSIENT} times in a row ({e}). "
+                                "Check your connection, then press Resume.", self.engine)
             else:
-                outbox.release(mid, attempt, str(e), self.engine)
-                delay = TRANSIENT_BACKOFF_S[min(n - 1, len(TRANSIENT_BACKOFF_S) - 1)]
+                delay = TRANSIENT_BACKOFF_S[min(self._transient_run - 1, len(TRANSIENT_BACKOFF_S) - 1)]
+                self._schedule_next(cp["id"], delay)
+            self._publish_msg(msg, "queued")
+            return 1
         except RecipientRejected as e:
             outbox.mark_failed(mid, attempt, str(e), False, self.engine)
         except MailerError as e:
@@ -192,9 +222,9 @@ class Sender:
             if msg.get("kind") == "initial":
                 with self.engine.begin() as c:
                     c.execute(text("UPDATE leads SET status='sent', last_activity_at=datetime('now') WHERE id=:i AND status IN ('new','drafted','approved','queued')"), {"i": msg["lead_id"]})
+        self._transient_run = 0
         final = outbox.get_message(mid, self.engine) or {}
         self._publish_msg(msg, final.get("state", "needs_confirmation"))
-        self._schedule_next(cp["id"], delay)
         campaigns.publish_sending(self.engine)
         return 1
 

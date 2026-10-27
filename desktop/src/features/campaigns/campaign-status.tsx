@@ -61,7 +61,7 @@ export function RunProgress({ campaign, caffeinate }: { campaign: Campaign; caff
 
 const PAUSE_TITLE: Record<string, string> = {
   bounce_rate: 'Paused automatically: too many bounces',
-  smtp_login: 'Paused automatically: Gmail login problem',
+  smtp_login: 'Paused automatically: cannot send through Gmail',
   shutdown: 'Paused because the app was closed',
   all: 'Paused: all sending is switched off',
   user: 'Paused',

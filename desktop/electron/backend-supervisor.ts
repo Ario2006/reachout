@@ -10,6 +10,7 @@ import { log } from './logger'
 const MAX_RESTARTS = 3
 const RESTART_WINDOW_MS = 60_000
 const HEALTH_TIMEOUT_MS = 40_000
+const KILL_GRACE_MS = 30_000  // must exceed backend/worker.py SEND_DRAIN_S (25 s)
 
 interface Options {
   python: string
@@ -174,7 +175,7 @@ export class BackendSupervisor extends EventEmitter {
     throw new Error('The backend did not become healthy in time.')
   }
 
-  /** Stop both processes: SIGTERM, then SIGKILL after 3 s. */
+  /** Stop both processes: SIGTERM, then SIGKILL after 30 s (longer than the worker's 25 s drain of an in-flight send). */
   async stop(): Promise<void> {
     this.stopping = true
     await this.killAll()
@@ -195,7 +196,7 @@ export class BackendSupervisor extends EventEmitter {
   private terminate(p: ChildProcess): Promise<void> {
     return new Promise((resolve) => {
       if (p.exitCode !== null || p.signalCode !== null) return resolve()
-      const timer = setTimeout(() => p.kill('SIGKILL'), 3000)
+      const timer = setTimeout(() => p.kill('SIGKILL'), KILL_GRACE_MS)
       p.once('exit', () => {
         clearTimeout(timer)
         resolve()

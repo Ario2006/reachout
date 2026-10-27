@@ -160,10 +160,10 @@ def test_unexpected_exception_is_treated_as_unknown_outcome(world):
     assert m["state"] == "needs_confirmation" and "may or may not" in m["error"]
 
 
-def test_transient_errors_retry_with_backoff_then_fail(world):
+def test_transient_errors_back_off_then_pause_the_campaign_without_failing_messages(world):
     engine, svc, _ = world
-    cid, leads = make_campaign(engine, 1)
-    svc.fake_mailer.fail_with["p0@co%dx0.test" % cid] = TransientSendError("4xx")
+    cid, leads = make_campaign(engine, 4)
+    svc.fake_mailer.fail_all = TransientSendError("4xx try later")
     snd = sender(engine)
     t0 = svc.fake_clock.now()
     assert snd.tick() == 1 and msg(engine, cid, leads[0])["state"] == "queued"
@@ -172,18 +172,131 @@ def test_transient_errors_retry_with_backoff_then_fail(world):
     snd.tick()
     assert camp(engine, cid)["next_send_at"] == pytest.approx(t0 + 61 + 120)
     svc.fake_clock.t = t0 + 61 + 121
+    snd.tick()  # third in a row: stop trying instead of walking through the whole queue
+    row = camp(engine, cid)
+    assert row["state"] == "paused" and row["paused_by"] == "smtp_login" and "3 times in a row" in row["pause_reason"]
+    assert set(states(engine, cid).values()) == {"queued"}  # nothing was marked failed by the outage
+
+
+def test_a_success_resets_the_consecutive_transient_count(world):
+    engine, svc, _ = world
+    cid, leads = make_campaign(engine, 3)
+    bad = "p0@co%dx0.test" % cid
+    svc.fake_mailer.fail_with[bad] = TransientSendError("4xx")
+    snd = sender(engine)
     snd.tick()
+    svc.fake_mailer.fail_with.clear()
+    run_ticks(snd, svc, 4, step=400)
+    assert camp(engine, cid)["state"] != "paused" and snd._transient_run == 0
+    assert msg(engine, cid, leads[0])["state"] == "sent"
+
+
+def test_an_error_before_the_smtp_call_releases_the_claim(world, monkeypatch):
+    engine, svc, _ = world
+    cid, leads = make_campaign(engine, 1)
+    monkeypatch.setattr(sender_mod.footer, "ensure_footer", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert sender(engine).tick() == 0
     m = msg(engine, cid, leads[0])
-    assert m["state"] == "failed" and "Gave up" in m["error"]
+    assert m["state"] == "queued" and m["claimed_at"] is None and not svc.fake_mailer.sent
+    monkeypatch.undo()
+    snd = sender(engine)
+    svc.fake_clock.advance(500)
+    assert snd.tick() == 1 and msg(engine, cid, leads[0])["state"] == "sent"
+
+
+def test_next_send_time_is_written_before_the_call_so_a_crash_cannot_lose_it(world):
+    engine, svc, _ = world
+    cid, _ = make_campaign(engine, 2)
+    seen = []
+
+    class Crash(BaseException):
+        pass
+
+    def die(email):
+        seen.append(camp(engine, cid)["next_send_at"])
+        raise Crash()
+
+    svc.fake_mailer.crash_after_send = die
+    with pytest.raises(Crash):
+        sender(engine).tick()
+    assert seen[0] is not None and camp(engine, cid)["next_send_at"] >= svc.fake_clock.now() + 60
+
+
+def test_unsendable_queued_messages_are_cancelled_so_the_campaign_can_finish(world):
+    engine, svc, _ = world
+    cid, leads = make_campaign(engine, 4)
+    suppress(engine, "p1@co%dx1.test" % cid)
+    with engine.begin() as c:
+        for lid, st in ((leads[2], "bounced"), (leads[3], "opted_out")):
+            c.execute(text("UPDATE leads SET status=:s WHERE id=:i"), {"s": st, "i": lid})
+    snd = sender(engine)
+    snd.tick()
+    st = states(engine, cid)
+    assert st[leads[1]] == st[leads[2]] == st[leads[3]] == "cancelled" and st[leads[0]] == "sent"
+    assert "suppression" in msg(engine, cid, leads[1])["error"] and "bounced" in msg(engine, cid, leads[2])["error"]
+    run_ticks(snd, svc, 3)
+    assert camp(engine, cid)["state"] == "done"
+    assert [e.to_addr for e in svc.fake_mailer.sent] == ["p0@co%dx0.test" % cid]
+
+
+def test_a_followup_campaign_is_not_finished_while_followups_are_due(world):
+    engine, svc, _ = world
+    cid, leads = make_campaign(engine, 2, followups_enabled=1, followup_days_json="[4, 9]")
+    snd = sender(engine)
+    run_ticks(snd, svc, 6)
+    assert len(svc.fake_mailer.sent) == 2
+    assert camp(engine, cid)["state"] == "running"  # both sent, follow-ups still to come
+    assert campaigns.followups_pending(cid, svc.fake_clock.now(), engine)
+    # one replied, one is suppressed: nobody left to follow up
+    with engine.begin() as c:
+        c.execute(text("UPDATE leads SET status='replied' WHERE id=:i"), {"i": leads[0]})
+    suppress(engine, "p1@co%dx1.test" % cid)
+    assert not campaigns.followups_pending(cid, svc.fake_clock.now(), engine)
+    snd.tick()
+    assert camp(engine, cid)["state"] == "done"
+
+
+def test_followups_pending_rules(world):
+    engine, svc, _ = world
+    now = svc.fake_clock.now()
+    off, _ = make_campaign(engine, 1)
+    assert not campaigns.followups_pending(off, now, engine)  # not enabled
+    cid, [lid] = make_campaign(engine, 1, followups_enabled=1, followup_days_json="[4, 9]")
+    assert not campaigns.followups_pending(cid, now, engine)  # first email not sent yet
+    with engine.begin() as c:
+        c.execute(text("UPDATE messages SET state='sent', claimed_at=:t WHERE campaign_id=:c"), {"t": now, "c": cid})
+    assert campaigns.followups_pending(cid, now, engine)
+    assert not campaigns.followups_pending(cid, now + 11 * 86400, engine)  # past the last window plus a day
+    for k, kind in enumerate(("followup_1", "followup_2")):
+        factories.draft(engine, cid, lid, status="approved", kind=kind, subject="Re", body=f"f{k}")
+        mid, _ = outbox.enqueue(lid, cid, kind, "", engine)
+        with engine.begin() as c:
+            c.execute(text("UPDATE messages SET state='sent' WHERE id=:i"), {"i": mid})
+    assert not campaigns.followups_pending(cid, now, engine)  # every planned follow-up went out
+
+
+def test_reopen_if_done_lets_the_followup_task_enqueue_again(world):
+    engine, svc, _ = world
+    cid, [lid] = make_campaign(engine, 1)
+    run_ticks(sender(engine), svc, 3)
+    assert camp(engine, cid)["state"] == "done"
+    factories.draft(engine, cid, lid, status="approved", kind="followup_1", subject="Re", body="f")
+    mid, _ = outbox.enqueue(lid, cid, "followup_1", "", engine, not_before=svc.fake_clock.now())
+    assert outbox.check(mid, svc.fake_clock.now() + 4000, db.load_settings(engine), engine).reason == "campaign"
+    assert campaigns.reopen_if_done(cid, engine) and camp(engine, cid)["state"] == "running" and camp(engine, cid)["finished_at"] is None
+    assert not campaigns.reopen_if_done(cid, engine)  # only from done
+    assert outbox.check(mid, svc.fake_clock.now() + 4000, db.load_settings(engine), engine).ok
 
 
 def test_suppression_is_checked_at_send_time(world):
     engine, svc, _ = world
     cid, leads = make_campaign(engine, 3)
     suppress(engine, "p1@co%dx1.test" % cid)  # added after the message was queued
+    claim = outbox.claim(msg(engine, cid, leads[1])["id"], svc.fake_clock.now(), db.load_settings(engine), engine)
+    assert not claim.ok and claim.reason == "suppressed"  # the claim itself refuses
     run_ticks(sender(engine), svc, 8)
     assert not svc.fake_mailer.to("p1@co%dx1.test" % cid)
-    assert msg(engine, cid, leads[1])["state"] == "queued"
+    assert msg(engine, cid, leads[1])["state"] == "cancelled"  # and the sender then drops it for good
     assert len(svc.fake_mailer.sent) == 2
 
 
