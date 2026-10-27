@@ -61,6 +61,7 @@ class ReadinessItem(BaseModel):
     label: str
     ok: bool
     detail: str
+    blocking: bool = True  # False = advisory: shown, but Start is not refused because of it
 
 
 class Readiness(BaseModel):

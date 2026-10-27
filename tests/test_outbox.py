@@ -37,6 +37,16 @@ def _world(engine):
     return engine
 
 
+def enq(lead_id, campaign_id, kind, subject, engine):
+    """outbox.enqueue needs an approved draft: make one (idempotently) so the queue tests stay about the queue."""
+    with engine.begin() as c:
+        if c.execute(text("SELECT 1 FROM leads WHERE id=:i"), {"i": lead_id}).first() and c.execute(text("SELECT 1 FROM campaigns WHERE id=:i"), {"i": campaign_id}).first() \
+                and kind in outbox.KINDS:
+            c.execute(text("INSERT OR IGNORE INTO drafts (campaign_id, lead_id, kind, subject, body, status, approved, approved_at) VALUES (:c, :l, :k, :s, 'Body.', 'approved', 1, datetime('now'))"),
+                      {"c": campaign_id, "l": lead_id, "k": kind, "s": subject})
+    return outbox.enqueue(lead_id, campaign_id, kind, subject, engine)
+
+
 def lead(engine, email, conf=C.published_personal, name=""):
     res = leads.ingest([LeadDraft(email=email, name=name, company="Co", domain=email.split("@")[1], email_confidence=conf, source_url="https://x.test/")],
                        run_id=None, mode="service", engine=engine)
@@ -45,7 +55,7 @@ def lead(engine, email, conf=C.published_personal, name=""):
 
 def queue(engine, email, kind="initial", **kw):
     lid = lead(engine, email, **kw) or engine.connect().execute(text("SELECT id FROM leads WHERE email=:e"), {"e": email}).scalar()
-    return outbox.enqueue(lid, 1, kind, "Hi", engine)[0]
+    return enq(lid, 1, kind, "Hi", engine)[0]
 
 
 def state(engine, mid):
@@ -56,19 +66,19 @@ def state(engine, mid):
 
 def test_a_person_is_queued_once_per_campaign_and_kind(world):
     lid = lead(world, "a@acme.ai")
-    first, created = outbox.enqueue(lid, 1, "initial", "Hi", world)
-    again, created2 = outbox.enqueue(lid, 1, "initial", "Hi again", world)
+    first, created = enq(lid, 1, "initial", "Hi", world)
+    again, created2 = enq(lid, 1, "initial", "Hi again", world)
     assert created and not created2 and first == again
-    assert outbox.enqueue(lid, 1, "followup_1", "Re", world)[1]  # a different kind is a different message
+    assert enq(lid, 1, "followup_1", "Re", world)[1]  # a different kind is a different message
     with pytest.raises(ValueError):
-        outbox.enqueue(lid, 1, "bogus", "", world)
+        enq(lid, 1, "bogus", "", world)
     with pytest.raises(ValueError):
-        outbox.enqueue(9999, 1, "initial", "", world)
+        enq(9999, 1, "initial", "", world)
 
 
 def test_the_database_itself_refuses_a_duplicate_message(world):
     lid = lead(world, "a@acme.ai")
-    outbox.enqueue(lid, 1, "initial", "Hi", world)
+    enq(lid, 1, "initial", "Hi", world)
     with pytest.raises(Exception, match="UNIQUE"):
         with world.begin() as c:
             c.execute(text("INSERT INTO messages (lead_id, campaign_id, kind) VALUES (:l, 1, 'initial')"), {"l": lid})
@@ -81,7 +91,7 @@ def test_a_sent_message_is_never_claimed_or_requeued(world):
     assert outbox.mark_sent(mid, r.attempt_id, "<abc@mail>", engine=world) and state(world, mid) == "sent"
     again = outbox.claim(mid, NOW + 5 * HOUR, settings(), world)
     assert not again.ok and again.reason == "not_queued"
-    assert outbox.enqueue(world.connect().execute(text("SELECT lead_id FROM messages WHERE id=:i"), {"i": mid}).scalar(), 1, "initial", "x", world) == (mid, False)
+    assert enq(world.connect().execute(text("SELECT lead_id FROM messages WHERE id=:i"), {"i": mid}).scalar(), 1, "initial", "x", world) == (mid, False)
     assert outbox.next_eligible(1, NOW + 5 * HOUR, settings(), world) == []
 
 
@@ -196,7 +206,7 @@ def test_daily_cap_counts_every_campaign_and_is_clamped_to_the_ceiling(world):
         c.execute(text("INSERT INTO campaigns (name, state, daily_cap) VALUES ('c2', 'running', 100)"))
     first = outbox.claim(queue(world, "a@a1.io"), NOW, settings(daily_cap=2), world)
     lid = lead(world, "b@b2.io")
-    second_msg = outbox.enqueue(lid, 2, "initial", "Hi", world)[0]  # other campaign, same global cap
+    second_msg = enq(lid, 2, "initial", "Hi", world)[0]  # other campaign, same global cap
     assert first.ok and outbox.claim(second_msg, NOW, settings(daily_cap=2), world).ok
     third = outbox.claim(queue(world, "c@c3.io"), NOW, settings(daily_cap=2), world)
     assert not third.ok and third.reason == "daily_cap" and third.retry_at > NOW
@@ -299,3 +309,81 @@ def test_new_send_settings_have_safe_defaults_and_limits():
     assert (s.max_per_domain_per_day, s.min_minutes_between_same_domain, s.use_recipient_timezone) == (2, 60, True)
     with pytest.raises(Exception):
         AppSettings(max_per_domain_per_day=0)
+
+
+# ---- milestone 4: approval, pause-all, not_before, release, dry-run check --------------------------------------
+def test_enqueue_needs_an_approved_draft_and_snapshots_it(world):
+    lid = lead(world, "a@acme.ai")
+    with pytest.raises(outbox.NotApproved):
+        outbox.enqueue(lid, 1, "initial", "Hi", world)
+    with world.begin() as c:
+        c.execute(text("INSERT INTO drafts (campaign_id, lead_id, subject, body, status, approved) VALUES (1, :l, 'Subj', 'Body text', 'pending', 0)"), {"l": lid})
+    with pytest.raises(outbox.NotApproved):
+        outbox.enqueue(lid, 1, "initial", "Hi", world)  # pending is not approved
+    with world.begin() as c:
+        c.execute(text("UPDATE drafts SET status='approved', approved=1 WHERE lead_id=:l"), {"l": lid})
+    mid, created = outbox.enqueue(lid, 1, "initial", "ignored", world, not_before=NOW + 5)
+    m = outbox.get_message(mid, world)
+    assert created and m["subject"] == "Subj" and m["body"] == "Body text" and m["draft_id"] and m["not_before"] == NOW + 5
+
+
+def test_check_reports_not_approved_when_the_draft_is_withdrawn_or_edited(world):
+    mid = queue(world, "a@acme.ai")
+    assert outbox.check(mid, NOW, settings(), world).ok
+    with world.begin() as c:
+        c.execute(text("UPDATE drafts SET body='changed'"))  # the DB trigger withdraws the approval
+    r = outbox.check(mid, NOW, settings(), world)
+    assert not r.ok and r.reason == "not_approved"
+    assert outbox.claim(mid, NOW, settings(), world).reason == "not_approved" and state(world, mid) == "queued"
+
+
+def test_check_reports_paused_all_and_not_before(world):
+    mid = queue(world, "a@acme.ai")
+    outbox.set_paused_all(True, world)
+    assert outbox.is_paused_all(world) and outbox.check(mid, NOW, settings(), world).reason == "paused_all"
+    assert outbox.claim(mid, NOW, settings(), world).reason == "paused_all"
+    outbox.set_paused_all(False, world)
+    assert not outbox.is_paused_all(world) and outbox.check(mid, NOW, settings(), world).ok
+    with world.begin() as c:
+        c.execute(text("UPDATE messages SET not_before=:t"), {"t": NOW + 3600})
+    r = outbox.check(mid, NOW, settings(), world)
+    assert r.reason == "not_before" and r.retry_at == NOW + 3600
+    assert outbox.check(mid, NOW + 3600, settings(), world).ok
+
+
+def test_set_message_id_and_release_only_for_the_holder_of_the_attempt(world):
+    mid = queue(world, "a@acme.ai")
+    claim = outbox.claim(mid, NOW, settings(), world)
+    assert not outbox.set_message_id(mid, "wrong", "<x@y>", world)
+    assert outbox.set_message_id(mid, claim.attempt_id, "<x@y>", world)
+    assert outbox.get_message(mid, world)["message_id"] == "<x@y>"
+    assert not outbox.release(mid, "wrong", "", world) and state(world, mid) == "sending"
+    assert outbox.release(mid, claim.attempt_id, "no connection", world) and state(world, mid) == "queued"
+    m = outbox.get_message(mid, world)
+    assert m["claimed_at"] is None and m["message_id"] is None and m["error"] == "no connection"
+    assert outbox.claim(mid, NOW + 1, settings(), world).ok  # may be claimed again, and counts only once
+
+
+def test_resync_snapshots_follows_the_reapproved_text_but_never_a_claimed_message(world):
+    a, b = queue(world, "a@acme.ai"), queue(world, "b@beta.io")
+    assert outbox.claim(b, NOW, settings(), world).ok
+    with world.begin() as c:
+        c.execute(text("UPDATE drafts SET body='v2'"))  # withdraws the approval (trigger)...
+        c.execute(text("UPDATE drafts SET status='approved', approved=1"))  # ...and the user approves the new text
+    assert outbox.resync_snapshots(1, world) == 1
+    assert outbox.get_message(a, world)["body"] == "v2" and outbox.get_message(b, world)["body"] == "Body."
+    assert outbox.resync_snapshots(1, world) == 0
+
+
+def test_check_draft_dry_run_uses_the_same_rules_without_a_message(world):
+    lid = lead(world, "a@acme.ai")
+    with world.begin() as c:
+        c.execute(text("INSERT INTO drafts (campaign_id, lead_id, subject, body, status, approved) VALUES (1, :l, 'S', 'B', 'approved', 1)"), {"l": lid})
+    assert outbox.check_draft(1, lid, "initial", NOW, settings(), world).ok
+    assert outbox.check_draft(1, lid, "followup_1", NOW, settings(), world).reason == "missing"
+    with world.begin() as c:
+        c.execute(text("UPDATE campaigns SET state='draft'"))  # a dry run is done before Start
+    assert outbox.check_draft(1, lid, "initial", NOW, settings(), world).ok
+    db.add_suppression("a@acme.ai", "x", world)
+    assert outbox.check_draft(1, lid, "initial", NOW, settings(), world).reason == "suppressed"
+    assert not world.connect().execute(text("SELECT COUNT(*) FROM messages")).scalar()

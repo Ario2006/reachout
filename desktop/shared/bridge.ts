@@ -36,6 +36,8 @@ export interface ReachoutBridge {
   setTheme(theme: ThemePreference): Promise<void>
   retryBackend(): Promise<void>
   quit(): Promise<void>
+  /** Native file dialog for the campaign attachment; resolves to the chosen PDF path or null when cancelled. */
+  pickPdf(): Promise<string | null>
 }
 
 export const CH = {
@@ -50,4 +52,5 @@ export const CH = {
   setTheme: 'theme:set',
   retryBackend: 'backend:retry',
   quit: 'app:quit',
+  pickPdf: 'dialog:pick-pdf',
 } as const

@@ -9,7 +9,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from backend.core import config, db, events, followups, inbox_poller, jobs, outbox, pipeline, sender
+from backend.core import campaigns, config, db, events, followups, inbox_poller, jobs, outbox, pipeline, sender
 from backend.core.job_handlers import HANDLERS
 from backend.core.store import CrawlStore
 from backend.procutil import start_parent_watchdog
@@ -17,6 +17,7 @@ from backend.procutil import start_parent_watchdog
 log = logging.getLogger("reachout.worker")
 HEARTBEAT_EVERY_S = 5
 JOB_POLL_EVERY_S = 1
+SEND_DRAIN_S = 25.0  # bounded wait for an in-flight send; if it is still running it is left to recover_stale
 
 
 def build_scheduler(engine=None, runner: jobs.JobRunner | None = None) -> BlockingScheduler:
@@ -52,6 +53,9 @@ def main() -> None:
     unsure = outbox.recover_stale(engine)  # emails caught mid-send by a crash: never resent automatically
     if unsure:
         log.warning("%d email(s) were mid-send when the app stopped; they now need your confirmation", unsure)
+    resumed = campaigns.resume_after_restart(engine)  # only campaigns the app itself paused on shutdown
+    if resumed:
+        log.info("resuming %d campaign(s) paused by the last shutdown", resumed)
     events.prune(engine=engine)
     runner = jobs.JobRunner(engine, HANDLERS)
     sched = build_scheduler(engine, runner)
@@ -68,6 +72,10 @@ def main() -> None:
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
+        # Graceful stop: no new claims, let an in-flight send finish (bounded) or leave it in `sending` for
+        # recover_stale, then pause running campaigns with paused_by shutdown so the next start resumes them.
+        if not sender.shutdown(SEND_DRAIN_S):
+            log.warning("a send was still in flight at shutdown; it will need confirmation on the next start")
         runner.shutdown()
 
 

@@ -19,6 +19,7 @@ const bridge: ReachoutBridge = {
   setTheme: (theme) => ipcRenderer.invoke(CH.setTheme, theme),
   retryBackend: () => ipcRenderer.invoke(CH.retryBackend),
   quit: () => ipcRenderer.invoke(CH.quit),
+  pickPdf: () => ipcRenderer.invoke(CH.pickPdf),
 }
 
 contextBridge.exposeInMainWorld('reachout', bridge)

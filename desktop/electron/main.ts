@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url'
 import { join, resolve, sep } from 'node:path'
 import {
-  BrowserWindow, Menu, app, ipcMain, nativeTheme, net, protocol, session, shell,
+  BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, net, protocol, session, shell,
   type IpcMainInvokeEvent,
 } from 'electron'
 import { CH, type AppInfo, type BackendStatus, type MenuAction, type ThemePreference } from '../shared/bridge'
@@ -10,7 +10,10 @@ import { buildCsp } from './csp'
 import { log } from './logger'
 import { buildMenu } from './menu'
 import { dataDir, logsDir, pythonPath, repoRoot } from './paths'
+import { SendingMonitor } from './sending-monitor'
 import { splashHtml } from './splash'
+import { TrayController } from './tray'
+import { closeAction, isSending, IDLE, type SendingSnapshot } from '../shared/sending-guard'
 
 const DEV_URL = process.env['ELECTRON_RENDERER_URL'] ?? null
 const isDev = DEV_URL !== null
@@ -26,6 +29,9 @@ protocol.registerSchemesAsPrivileged([
 let mainWin: BrowserWindow | null = null
 let splashWin: BrowserWindow | null = null
 let quitting = false
+let skipQuitConfirm = false
+let lastSending: SendingSnapshot = IDLE
+let monitorTimer: NodeJS.Timeout | null = null
 
 const supervisor = new BackendSupervisor({
   python: pythonPath(),
@@ -34,6 +40,31 @@ const supervisor = new BackendSupervisor({
   allowedOrigin: APP_ORIGIN,
   reload: isDev,
 })
+
+const monitor = new SendingMonitor(() => supervisor.info)
+const tray = new TrayController({
+  show: () => showMainWindow(),
+  pauseAll: () => void monitor.pauseAll().then(() => refreshSending()),
+  quit: () => app.quit(),
+})
+
+function showMainWindow(): void {
+  if (mainWin && !mainWin.isDestroyed()) {
+    if (mainWin.isMinimized()) mainWin.restore()
+    mainWin.show()
+    mainWin.focus()
+  }
+  tray.destroy()
+}
+
+/** Poll the API while the app runs: a hidden window with nothing left to send comes back (no invisible app). */
+async function refreshSending(): Promise<void> {
+  lastSending = await monitor.snapshot()
+  const hidden = mainWin !== null && !mainWin.isDestroyed() && !mainWin.isVisible()
+  if (!hidden) return
+  if (isSending(lastSending) || lastSending.pausedAll) tray.update(lastSending)
+  else showMainWindow()
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -79,6 +110,14 @@ function createMainWindow(): BrowserWindow {
   w.once('ready-to-show', () => {
     w.show()
     splashWin?.close()
+  })
+  w.on('close', (event) => {
+    if (closeAction(isSending(lastSending), quitting) === 'hide') {
+      event.preventDefault()  // keep sending: hide to the menu bar instead of quitting
+      w.hide()
+      tray.update(lastSending)
+      log('info', 'window hidden to the menu bar: a campaign is sending')
+    }
   })
   w.on('closed', () => { mainWin = null })
   void w.loadURL(isDev && DEV_URL ? DEV_URL : `${APP_SCHEME}://app/index.html`)
@@ -180,6 +219,11 @@ function registerIpc(): void {
     if (!isOurWindow(e)) throw new Error('Not allowed')
     await boot()
   })
+  ipcMain.handle(CH.pickPdf, async (e): Promise<string | null> => {
+    if (!isOurWindow(e, true) || !mainWin) throw new Error('Not allowed')
+    const r = await dialog.showOpenDialog(mainWin, { properties: ['openFile'], filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+    return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
   ipcMain.handle(CH.quit, (e) => {
     if (!isOurWindow(e)) throw new Error('Not allowed')
     app.quit()
@@ -209,16 +253,39 @@ supervisor.on('status', (status: BackendStatus) => {
   }
 })
 
+async function confirmQuitWhileSending(): Promise<boolean> {
+  const opts = {
+    type: 'question' as const, buttons: ['Pause sending and quit', 'Keep sending'], defaultId: 1, cancelId: 1,
+    message: 'A campaign is sending.',
+    detail: 'Quitting pauses all sending. You can resume it the next time you open Reachout.',
+  }
+  // A hidden window cannot host a sheet (the dialog would never appear): use the parent-less variant then.
+  const r = mainWin && !mainWin.isDestroyed() && mainWin.isVisible() ? await dialog.showMessageBox(mainWin, opts) : await dialog.showMessageBox(opts)
+  return r.response === 0
+}
+
 app.on('before-quit', (event) => {
   if (quitting) return
   event.preventDefault()
-  quitting = true
-  log('info', 'quitting: stopping backend')
-  void supervisor.stop().finally(() => app.exit(0))
+  void (async () => {
+    const snapshot = await monitor.snapshot()
+    if (isSending(snapshot)) {
+      if (!skipQuitConfirm && !(await confirmQuitWhileSending())) {
+        showMainWindow()
+        return // the user chose to keep sending
+      }
+      await monitor.pauseAll() // sending stops cleanly before the processes are killed
+    }
+    quitting = true
+    tray.destroy()
+    if (monitorTimer) clearInterval(monitorTimer)
+    log('info', 'quitting: stopping backend')
+    await supervisor.stop().finally(() => app.exit(0))
+  })()
 })
 app.on('window-all-closed', () => app.quit())
-process.on('SIGTERM', () => app.quit())
-process.on('SIGINT', () => app.quit())
+process.on('SIGTERM', () => { skipQuitConfirm = true; app.quit() })
+process.on('SIGINT', () => { skipQuitConfirm = true; app.quit() })
 
 void app.whenReady().then(async () => {
   if (!app.hasSingleInstanceLock()) return
@@ -235,4 +302,5 @@ void app.whenReady().then(async () => {
   )
   splashWin = createSplash()
   await boot()
+  monitorTimer = setInterval(() => void refreshSending(), 4000)
 })
