@@ -330,6 +330,8 @@ async def finish_site(c: EngineCtx, job: SiteJob) -> None:
             keep, other = (d, cur) if ((d.name and not cur.name) or (d.role and not cur.role)) else (cur, d)
             keep.trace += [t for t in other.trace if t not in keep.trace]
             keep.trace.append(("source", f"Also found on {other.source_url}"))
+            keep.also += other.also + [{"url": other.source_url, "tier": other.page_tier, "type": other.page_type,
+                                        "fetched_at": other.fetched_at, "snippet": other.context_snippet}]
             best[d.email] = keep
     kept = list(best.values())
     for g in extractor.make_guesses(people, kept, domain, job.company, lambda pr: source.get(pr.name, job.cand.url), plan.target_roles):
@@ -353,6 +355,10 @@ async def finish_site(c: EngineCtx, job: SiteJob) -> None:
     mx_ok: dict[str, bool] = {}
     for d in kept:
         dom = domains.split_email(d.email)[1]
+        if domains.is_disposable(dom):
+            run.bump(leads_dropped=1)  # type: ignore[attr-defined]
+            c.emit(run.log, f"{d.email}: dropped, {dom} is a disposable-mailbox provider")  # type: ignore[attr-defined]
+            continue
         if dom not in mx_ok:
             if await c.blocking(c.store.no_mx, dom):
                 mx_ok[dom] = False
@@ -363,6 +369,7 @@ async def finish_site(c: EngineCtx, job: SiteJob) -> None:
                     await c.blocking(c.store.mark_no_mx, dom)
         if mx_ok[dom]:
             d.trace.append(("mx", f"{dom} has a mail server (MX record)"))
+            d.mx_ok = True
             checked.append(d)
         else:
             run.bump(leads_dropped=1)  # type: ignore[attr-defined]
@@ -370,7 +377,7 @@ async def finish_site(c: EngineCtx, job: SiteJob) -> None:
 
     t2 = time.monotonic()
     result = await c.blocking(
-        lambda: leads.ingest(checked, run_id=c.run_id, mode=plan.mode.value, engine=c.run.engine))  # type: ignore[attr-defined]
+        lambda: leads.ingest(checked, run_id=c.run_id, mode=plan.mode.value, target_roles=plan.target_roles, engine=c.run.engine))  # type: ignore[attr-defined]
     c.metrics.stage_s["store"] += time.monotonic() - t2
     for row in result.new:
         run.conf[row["email_confidence"]] += 1  # type: ignore[attr-defined]

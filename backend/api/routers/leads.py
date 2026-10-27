@@ -15,8 +15,8 @@ MAX_IMPORT_BYTES = 5_000_000
 
 
 def _filter(q: str, status: list[LeadStatus], mode: list[Mode], confidence: list[EmailConfidence],
-            run_id: int | None) -> leads.LeadFilter:
-    return leads.LeadFilter(q=q, status=status, mode=mode, confidence=confidence, run_id=run_id)
+            run_id: int | None, min_score: int | None = None) -> leads.LeadFilter:
+    return leads.LeadFilter(q=q, status=status, mode=mode, confidence=confidence, run_id=run_id, min_score=min_score)
 
 
 @router.get("", response_model=LeadsPage)
@@ -27,11 +27,12 @@ def list_leads(
     mode: Annotated[list[Mode], Query()] = [],  # noqa: B006
     confidence: Annotated[list[EmailConfidence], Query()] = [],  # noqa: B006
     run_id: int | None = None,
+    min_score: int | None = Query(None, ge=0, le=100),
     sort: str = "",
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=5000),
 ) -> LeadsPage:
-    rows, total = leads.query_leads(_filter(q, status, mode, confidence, run_id), sort, offset, limit, engine)
+    rows, total = leads.query_leads(_filter(q, status, mode, confidence, run_id, min_score), sort, offset, limit, engine)
     return LeadsPage(items=[LeadOut(**r) for r in rows], total=total)
 
 
@@ -43,9 +44,10 @@ def export_csv(
     mode: Annotated[list[Mode], Query()] = [],  # noqa: B006
     confidence: Annotated[list[EmailConfidence], Query()] = [],  # noqa: B006
     run_id: int | None = None,
+    min_score: int | None = Query(None, ge=0, le=100),
     sort: str = "",
 ) -> Response:
-    body = exports.export_csv(_filter(q, status, mode, confidence, run_id), sort, engine)
+    body = exports.export_csv(_filter(q, status, mode, confidence, run_id, min_score), sort, engine)
     return Response(body, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="leads.csv"'})
 

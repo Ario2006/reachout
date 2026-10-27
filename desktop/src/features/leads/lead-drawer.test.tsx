@@ -7,7 +7,8 @@ import { LeadDrawer } from './lead-drawer'
 const detail = (over: Record<string, unknown> = {}) => ({
   id: 4, name: 'Priya Sharma', email: 'priya@acme.ai', role: 'CEO', company: 'Acme AI', domain: 'acme.ai', source_url: 'https://acme.ai/team',
   email_confidence: 'published_personal', mode: 'internship', status: 'new', notes: null, created_at: '2026-10-26 10:00:00', updated_at: '2026-10-26 10:00:00',
-  search_run_id: 2, context_snippet: 'Priya Sharma, Co-founder and CEO', run: { id: 2, request_text: 'AI interns in Bangalore', started_at: 'x' }, timeline: [], ...over,
+  search_run_id: 2, context_snippet: 'Priya Sharma, Co-founder and CEO', run: { id: 2, request_text: 'AI interns in Bangalore', started_at: 'x' }, timeline: [], score: 81, score_reasons: [{ label: 'confidence', points: 40, detail: "A person's address published on the site" }, { label: 'name', points: 15, detail: 'The address matches the name Priya Sharma' }],
+  sources: [{ source_url: 'https://acme.ai/team', page_type: 'team', page_tier: 'http' }], trace: [{ at: 'x', kind: 'found', message: 'Priya Sharma is on the team page' }, { at: 'x', kind: 'score', message: 'Scored 81/100' }], ...over,
 })
 
 describe('LeadDrawer', () => {
@@ -63,5 +64,27 @@ describe('LeadDrawer', () => {
     mockApi({})
     renderWithProviders(<LeadDrawer id={null} onClose={() => {}} />)
     expect(screen.queryByTestId('lead-drawer')).toBeNull()
+  })
+
+  it('shows the score with its reasons, every source page, and the trace behind the lead', async () => {
+    mockApi({ 'GET /leads/4': { json: detail({ sources: [
+      { source_url: 'https://acme.ai/team', page_type: 'team', page_tier: 'http' },
+      { source_url: 'https://acme.ai/about', page_type: 'about', page_tier: 'cache' },
+    ] }) } })
+    renderWithProviders(<LeadDrawer id={4} onClose={() => undefined} />)
+    expect(await screen.findByLabelText('Score 81 out of 100')).toBeInTheDocument()
+    expect(screen.getByText('+40')).toBeInTheDocument()
+    expect(screen.getByText('The address matches the name Priya Sharma')).toBeInTheDocument()
+    expect(screen.getByText('Seen on 2 pages')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Why was this found?'))
+    expect(screen.getByText('Priya Sharma is on the team page')).toBeVisible()
+  })
+
+  it('shows no score section for imported leads', async () => {
+    mockApi({ 'GET /leads/4': { json: detail({ score: null, score_reasons: [], sources: [], trace: [] }) } })
+    renderWithProviders(<LeadDrawer id={4} onClose={() => undefined} />)
+    await screen.findByText('Where this came from')
+    expect(screen.queryByText('Why was this found?')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Score /)).not.toBeInTheDocument()
   })
 })

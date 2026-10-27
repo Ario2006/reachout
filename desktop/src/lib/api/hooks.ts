@@ -154,6 +154,17 @@ export function useCancelRun() {
   })
 }
 
+export function useResumeRun() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.post('/discovery/runs/{run_id}/resume', { params: { run_id: id } }),
+    onSuccess: (_run, id) => {
+      void qc.invalidateQueries({ queryKey: qk.runs })
+      void qc.invalidateQueries({ queryKey: qk.run(id) })
+    },
+  })
+}
+
 // ---- leads ----------------------------------------------------------------------------------
 
 export interface LeadQuery {
@@ -162,15 +173,16 @@ export interface LeadQuery {
   mode: Mode[]
   confidence: EmailConfidence[]
   run_id: number | null
+  min_score: number | null
   sort: string
 }
 
-export const EMPTY_QUERY: LeadQuery = { q: '', status: [], mode: [], confidence: [], run_id: null, sort: '' }
+export const EMPTY_QUERY: LeadQuery = { q: '', status: [], mode: [], confidence: [], run_id: null, min_score: null, sort: '' }
 export const LEADS_LIMIT = 5000
 
 const leadParams = (f: LeadQuery) => ({
   q: f.q || undefined, status: f.status, mode: f.mode, confidence: f.confidence,
-  run_id: f.run_id ?? undefined, sort: f.sort || undefined,
+  run_id: f.run_id ?? undefined, min_score: f.min_score ?? undefined, sort: f.sort || undefined,
 })
 
 export const useLeads = (f: LeadQuery) =>

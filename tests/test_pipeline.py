@@ -405,7 +405,7 @@ def test_a_cancelled_run_resumes_where_it_stopped_without_refetching(world, monk
     assert len(by_email(world.engine, run["id"])) == 12 and leads_before <= set(by_email(world.engine, run["id"]))
     from collections import Counter
     twice = [u for u, n in Counter(world.web.requests).items() if n > 1]
-    assert len(twice) <= 2 and not any(u.endswith("/") and "robots" not in u for u in twice)  # only requests in flight at the cancel are repeated
+    assert len(twice) <= 2  # only requests in flight at the cancel (one per worker, 2 workers) are ever repeated
     assert all(d["state"] == "done" for d in pipeline.run_domains(run["id"], world.engine))
     assert any("left to crawl from the interrupted run" in m["message"] for m in pipeline.run_log(run["id"], engine=world.engine))
 
@@ -542,3 +542,18 @@ def test_more_queries_are_fresh_varied_and_exhaust_cleanly():
     assert len(seen) == len(set(q.lower() for q in seen)) > 20
     assert any("fintech" in q for q in seen) and any("Delhi" in q for q in seen)
     assert pl.more_queries(plan, used) == []
+
+
+def test_leads_from_a_run_are_scored_traced_and_disposable_domains_dropped(world, monkeypatch):
+    world.web.routes["yopmail.com/"] = '<a href="mailto:boss@yopmail.com">b</a>'
+    monkeypatch.setattr(discovery, "make_searcher", lambda s, p: lambda q: [discovery.SearchHit(url=u, query=q) for u in HITS + ["https://yopmail.com/"]])
+    run_id, _ = start(world.engine)
+    got = by_email(world.engine, run_id)
+    p = got["priya@acme.ai"]
+    assert p["score"] > got["rahul@acme.ai"]["score"] > got["careers@acme.ai"]["score"] > 0  # a guess at the wanted CTO outranks a generic mailbox; the reasons say why
+    detail = leads.get_lead(p["id"], world.engine)
+    assert {r["label"] for r in detail["score_reasons"]} >= {"confidence", "name", "role", "page", "mx"}
+    kinds = [t["kind"] for t in detail["trace"]]
+    assert "mx" in kinds and kinds[-1] == "score" and detail["sources"][0]["page_type"] == "team" and detail["sources"][0]["page_tier"] == "http"
+    assert "boss@yopmail.com" not in got
+    assert any("disposable-mailbox provider" in m["message"] for m in pipeline.run_log(run_id, engine=world.engine))

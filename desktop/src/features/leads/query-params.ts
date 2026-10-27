@@ -7,7 +7,7 @@ const MODES: readonly Mode[] = ['internship', 'investor', 'service']
 const CONFS: readonly EmailConfidence[] = ['published_personal', 'published_generic', 'guessed']
 
 /** Sort keys the backend accepts, and the columns that carry them. */
-export const SORTABLE = ['name', 'email', 'role', 'company', 'domain', 'status', 'updated_at'] as const
+export const SORTABLE = ['score', 'name', 'email', 'role', 'company', 'domain', 'status', 'updated_at'] as const
 
 function pick<T extends string>(raw: string | null, allowed: readonly T[]): T[] {
   return (raw ?? '').split(',').filter((v): v is T => (allowed as readonly string[]).includes(v))
@@ -22,6 +22,7 @@ export function queryFromParams(sp: URLSearchParams): LeadQuery {
     mode: pick(sp.get('mode'), MODES),
     confidence: pick(sp.get('conf'), CONFS),
     run_id: Number.isInteger(run) && run > 0 ? run : null,
+    min_score: minScore(sp.get('min')),
     sort: formatSort(parseSort(sp.get('sort') ?? '')),
   }
 }
@@ -33,8 +34,14 @@ export function paramsFromQuery(q: LeadQuery): URLSearchParams {
   if (q.mode.length) sp.set('mode', q.mode.join(','))
   if (q.confidence.length) sp.set('conf', q.confidence.join(','))
   if (q.run_id !== null) sp.set('run', String(q.run_id))
+  if (q.min_score !== null) sp.set('min', String(q.min_score))
   if (q.sort) sp.set('sort', q.sort)
   return sp
+}
+
+function minScore(raw: string | null): number | null {
+  const n = Number(raw)
+  return raw !== null && Number.isInteger(n) && n >= 1 && n <= 100 ? n : null
 }
 
 /** "company:asc,name:desc" -> TanStack sorting state (unknown columns are dropped). */
@@ -50,4 +57,4 @@ export function parseSort(sort: string): SortingState {
 export const formatSort = (s: SortingState): string => s.map((x) => `${x.id}:${x.desc ? 'desc' : 'asc'}`).join(',')
 
 export const hasFilters = (q: LeadQuery): boolean =>
-  q.q !== '' || q.status.length > 0 || q.mode.length > 0 || q.confidence.length > 0 || q.run_id !== null
+  q.q !== '' || q.status.length > 0 || q.mode.length > 0 || q.confidence.length > 0 || q.run_id !== null || q.min_score !== null

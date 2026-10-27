@@ -387,3 +387,21 @@ def test_resume_endpoint_requeues_only_cancelled_or_failed_runs(client, engine):
     again = client.post(f"/discovery/runs/{r['id']}/resume")
     assert again.status_code == 202 and again.json()["state"] == "queued" and again.json()["job_id"] != r["job_id"]
     assert client.post("/discovery/runs/999/resume").status_code in (404, 409)
+
+
+def test_leads_api_exposes_score_filter_sort_and_provenance(client, engine):
+    from backend.core import leads as L
+    from backend.core.extractor import LeadDraft
+    from backend.core.models import EmailConfidence as C
+
+    mk = lambda e, c, n, r: LeadDraft(email=e, name=n, role=r, company="Acme", domain="acme.ai", source_url="https://acme.ai/team",  # noqa: E731
+                                      email_confidence=c, page_type="team", trace=[("found", "on the team page")])
+    L.ingest([mk("priya@acme.ai", C.published_personal, "Priya Sharma", "CTO"), mk("info@acme.ai", C.published_generic, "", "")],
+             run_id=None, mode="service", target_roles=["CTO"], engine=engine)
+    items = client.get("/leads", params={"sort": "score:desc"}).json()["items"]
+    assert [i["email"] for i in items] == ["priya@acme.ai", "info@acme.ai"] and items[0]["score"] > items[1]["score"] > 0
+    assert [i["email"] for i in client.get("/leads", params={"min_score": 70}).json()["items"]] == ["priya@acme.ai"]
+    assert client.get("/leads", params={"min_score": 101}).status_code == 422
+    d = client.get(f"/leads/{items[0]['id']}").json()
+    assert d["score_reasons"][0] == {"label": "confidence", "points": 40, "detail": "A person's address published on the site"}
+    assert d["sources"][0]["page_type"] == "team" and [t["kind"] for t in d["trace"]] == ["found", "score"]

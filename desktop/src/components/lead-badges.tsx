@@ -21,6 +21,14 @@ const CONF: Record<EmailConfidence, { label: string; cls: string; help: string }
   },
 }
 
+/** 0-100 lead score, colour-banded. The drawer lists the reasons behind it. */
+export function ScoreBadge({ value }: { value: number | null | undefined }) {
+  if (value === null || value === undefined) return <span className="text-muted-foreground text-xs" title="Imported leads are not scored">–</span>
+  const cls = value >= 75 ? 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300'
+    : value >= 50 ? 'border-border bg-muted text-foreground' : 'border-amber-600/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+  return <Badge variant="outline" className={cn('h-5 min-w-9 justify-center px-1.5 text-[11px] font-medium tabular-nums', cls)} data-testid="score" aria-label={`Score ${value} out of 100`}>{value}</Badge>
+}
+
 export function ConfidenceBadge({ value }: { value: EmailConfidence }) {
   const c = CONF[value]
   return (

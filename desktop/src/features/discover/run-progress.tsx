@@ -1,4 +1,4 @@
-import { Check, CircleDashed, Loader2, X } from 'lucide-react'
+import { Check, CircleDashed, Loader2, RotateCw, X } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { downloadLeadsCsv, EMPTY_QUERY, useCancelRun, useRun } from '@/lib/api/hooks'
+import { downloadLeadsCsv, EMPTY_QUERY, useCancelRun, useResumeRun, useRun } from '@/lib/api/hooks'
 import { pluralize } from '@/lib/format'
 import { num, useLiveRuns, type LiveDomain } from '@/lib/runs-store'
 import { cn } from '@/lib/utils'
+import { EngineStats } from './engine-stats'
 
 type StepState = 'pending' | 'active' | 'done'
 
@@ -41,6 +42,7 @@ const STATE_LABEL: Record<string, string> = { queued: 'Waiting', crawling: 'Craw
 export function RunProgress({ runId }: { runId: number }) {
   const detail = useRun(runId)
   const cancel = useCancelRun()
+  const resume = useResumeRun()
   const seed = useLiveRuns((s) => s.seed)
   const live = useLiveRuns((s) => s.runs[runId])
   const logRef = useRef<HTMLDivElement>(null)
@@ -130,12 +132,19 @@ export function RunProgress({ runId }: { runId: number }) {
               {num(stats, 'leads_dup') > 0 ? `, ${num(stats, 'leads_dup')} already known` : ''}
               {num(stats, 'leads_suppressed') > 0 ? `, ${num(stats, 'leads_suppressed')} suppressed` : ''}.
             </p>
+            {state === 'cancelled' || state === 'failed' ? (
+              <Button size="sm" variant="outline" onClick={() => resume.mutate(runId)} disabled={resume.isPending}>
+                <RotateCw aria-hidden /> Resume
+              </Button>
+            ) : null}
             <Button asChild size="sm"><Link to={`/leads?run=${run.id}`}>Review {num(stats, 'leads_new')} new leads</Link></Button>
             <Button size="sm" variant="outline" onClick={() => void downloadLeadsCsv({ ...EMPTY_QUERY, run_id: run.id }, `leads-run-${run.id}.csv`)}>
               Download CSV
             </Button>
           </div>
         ) : null}
+
+        <EngineStats stats={stats} />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div>

@@ -221,3 +221,20 @@ def namelike_local(local: str) -> bool:
 def same_site(email_domain: str, site_domain: str) -> bool:
     """The address belongs to the site we crawled (same registrable domain)."""
     return registrable(email_domain) == registrable(site_domain)
+
+
+# Throwaway-mailbox providers: a lead here is never a real company contact.
+DISPOSABLE = frozenset({
+    "mailinator.com", "guerrillamail.com", "guerrillamail.net", "guerrillamail.org", "sharklasers.com", "10minutemail.com",
+    "10minutemail.net", "tempmail.com", "temp-mail.org", "temp-mail.io", "yopmail.com", "yopmail.net", "trashmail.com",
+    "throwawaymail.com", "getnada.com", "maildrop.cc", "dispostable.com", "fakeinbox.com", "mailnesia.com", "mintemail.com",
+    "mytemp.email", "tempinbox.com", "emailondeck.com", "spamgourmet.com", "mohmal.com", "tempr.email", "discard.email",
+    "burnermail.io", "inboxkitten.com", "mailcatch.com", "moakt.com", "mail.tm", "tmpmail.org", "tempail.com", "emailfake.com",
+    "grr.la", "spam4.me", "mailforspam.com", "trbvm.com", "armyspy.com", "cuvox.de", "dayrep.com", "einrot.com", "fleckens.hu",
+    "gustr.com", "jourrapide.com", "rhyta.com", "superrito.com", "teleworm.us",
+})
+
+
+def is_disposable(domain: str) -> bool:
+    d = domain.strip().lower()
+    return d in DISPOSABLE or registrable(d) in DISPOSABLE

@@ -2,7 +2,7 @@ import { Copy, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ConfidenceBadge, STATUS_OPTIONS } from '@/components/lead-badges'
+import { ConfidenceBadge, ScoreBadge, STATUS_OPTIONS } from '@/components/lead-badges'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -92,6 +92,47 @@ function DrawerBody({ lead }: { lead: LeadDetail }) {
         ) : null}
         {lead.notes?.startsWith('Guessed') ? <p className="text-xs text-amber-700 dark:text-amber-300">{lead.notes}</p> : null}
       </section>
+
+      {lead.score !== null && lead.score !== undefined ? (
+        <section aria-label="Score" className="space-y-1.5">
+          <h3 className="flex items-center gap-2 text-sm font-medium">Score <ScoreBadge value={lead.score} /></h3>
+          <ul className="space-y-0.5 text-sm">
+            {lead.score_reasons.map((r) => (
+              <li key={r.label} className="flex gap-2"><span className="text-muted-foreground w-9 shrink-0 text-right text-xs tabular-nums">+{r.points}</span><span>{r.detail}</span></li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {lead.sources.length > 1 ? (
+        <section aria-label="Sources" className="space-y-1.5">
+          <h3 className="text-sm font-medium">Seen on {lead.sources.length} pages</h3>
+          <ul className="space-y-1 text-xs">
+            {lead.sources.map((s) => {
+              const u = safeHttpUrl(s.source_url)
+              return (
+                <li key={s.source_url} className="break-all">
+                  {u ? <a href={u.href} target="_blank" rel="noreferrer noopener" className="text-primary hover:underline">{s.source_url}</a> : s.source_url}
+                  <span className="text-muted-foreground"> {[s.page_type, s.page_tier].filter(Boolean).join(' · ')}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {lead.trace.length > 0 ? (
+        <section aria-label="Why was this found" className="space-y-1.5">
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">Why was this found?</summary>
+            <ol className="mt-2 space-y-1.5 border-l pl-3">
+              {lead.trace.map((t, i) => (
+                <li key={i} className="text-xs"><span className="text-muted-foreground mr-1.5 uppercase">{t.kind}</span>{t.message}</li>
+              ))}
+            </ol>
+          </details>
+        </section>
+      ) : null}
 
       <section aria-label="Timeline" className="space-y-1.5">
         <h3 className="text-sm font-medium">Activity</h3>

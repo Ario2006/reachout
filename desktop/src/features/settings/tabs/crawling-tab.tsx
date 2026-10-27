@@ -3,6 +3,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { SettingsResponse } from '@/lib/api/types'
@@ -19,7 +20,10 @@ const schema = z.object({
   fetch_timeout_s: num(5, 60),
   search_source: z.enum(['ddgs', 'searxng']),
   searxng_url: z.string().trim(),
-  crawl_concurrency: num(1, 8),
+  global_concurrency: num(1, 64),
+  page_cache_ttl_days: num(1, 90),
+  crawler_contact: z.string().trim().max(200, { error: 'At most 200 characters' }),
+  browser_tier_enabled: z.boolean(),
   max_domains_per_run: num(1, 300),
   max_leads_per_site: num(1, 25),
   target_leads: num(0, 500),
@@ -36,7 +40,8 @@ export function CrawlingTab({ data }: { data: SettingsResponse }) {
       max_pages_per_domain: s.max_pages_per_domain, crawl_delay_min_s: s.crawl_delay_min_s,
       crawl_delay_max_s: s.crawl_delay_max_s, fetch_timeout_s: s.fetch_timeout_s,
       search_source: s.search_source === 'searxng' ? 'searxng' : 'ddgs', searxng_url: s.searxng_url,
-      crawl_concurrency: s.crawl_concurrency ?? 4, max_domains_per_run: s.max_domains_per_run ?? 60, max_leads_per_site: s.max_leads_per_site ?? 5, target_leads: s.target_leads ?? 30,
+      global_concurrency: s.global_concurrency ?? 30, page_cache_ttl_days: s.page_cache_ttl_days ?? 14,
+      crawler_contact: s.crawler_contact ?? '', browser_tier_enabled: s.browser_tier_enabled ?? false, max_domains_per_run: s.max_domains_per_run ?? 60, max_leads_per_site: s.max_leads_per_site ?? 5, target_leads: s.target_leads ?? 30,
       blocklist_text: (s.domain_blocklist_extra ?? []).join('\n'),
     },
   })
@@ -80,11 +85,11 @@ export function CrawlingTab({ data }: { data: SettingsResponse }) {
               <FieldDescription>The most sites one search will crawl.</FieldDescription>
               <FieldError errors={[e.max_domains_per_run]} />
             </Field>
-            <Field data-invalid={!!e.crawl_concurrency}>
+            <Field data-invalid={!!e.global_concurrency}>
               <FieldLabel htmlFor="concurrency">Sites crawled at once</FieldLabel>
-              <Input id="concurrency" type="number" aria-invalid={!!e.crawl_concurrency} {...form.register('crawl_concurrency', { valueAsNumber: true })} />
-              <FieldDescription>Each site is still paced by the delay above. 4 suits an 8 GB Mac.</FieldDescription>
-              <FieldError errors={[e.crawl_concurrency]} />
+              <Input id="concurrency" type="number" aria-invalid={!!e.global_concurrency} {...form.register('global_concurrency', { valueAsNumber: true })} />
+              <FieldDescription>Each site still gets one request at a time, paced by the delay above. 30 suits an 8 GB Mac.</FieldDescription>
+              <FieldError errors={[e.global_concurrency]} />
             </Field>
           </div>
           <Field data-invalid={!!e.target_leads}>
@@ -104,6 +109,32 @@ export function CrawlingTab({ data }: { data: SettingsResponse }) {
               kind of outreach, for example careers@ and jobs@ before sales@ when looking for internships.
             </FieldDescription>
             <FieldError errors={[e.max_leads_per_site]} />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field data-invalid={!!e.page_cache_ttl_days}>
+              <FieldLabel htmlFor="cache-ttl">Keep fetched pages for (days)</FieldLabel>
+              <Input id="cache-ttl" type="number" aria-invalid={!!e.page_cache_ttl_days} {...form.register('page_cache_ttl_days', { valueAsNumber: true })} />
+              <FieldDescription>A repeat search reuses saved pages instead of fetching them again.</FieldDescription>
+              <FieldError errors={[e.page_cache_ttl_days]} />
+            </Field>
+            <Field data-invalid={!!e.crawler_contact}>
+              <FieldLabel htmlFor="crawler-contact">Crawler contact</FieldLabel>
+              <Input id="crawler-contact" placeholder="https://your-site.example or you@example.com" aria-invalid={!!e.crawler_contact} {...form.register('crawler_contact')} />
+              <FieldDescription>Shown to site owners in the crawler's User-Agent so they can reach you. Never filled in automatically.</FieldDescription>
+              <FieldError errors={[e.crawler_contact]} />
+            </Field>
+          </div>
+          <Field orientation="horizontal">
+            <Controller control={form.control} name="browser_tier_enabled" render={({ field }) => (
+              <Switch id="browser-tier" checked={field.value} onCheckedChange={field.onChange} />
+            )} />
+            <div className="space-y-1">
+              <FieldLabel htmlFor="browser-tier">Render JavaScript-only pages</FieldLabel>
+              <FieldDescription>
+                Uses a headless browser, at most two pages at a time, only for pages that arrive empty. Off by default and skipped
+                cleanly if Playwright's Chromium is not installed (<code>.venv/bin/python -m playwright install chromium</code>).
+              </FieldDescription>
+            </div>
           </Field>
           <Field>
             <FieldLabel htmlFor="blocklist">Sites to never crawl</FieldLabel>

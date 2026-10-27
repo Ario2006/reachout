@@ -9,12 +9,10 @@
             "title": "Allow Guessed Emails",
             "type": "boolean"
           },
-          "crawl_concurrency": {
-            "default": 4,
-            "maximum": 8.0,
-            "minimum": 1.0,
-            "title": "Crawl Concurrency",
-            "type": "integer"
+          "browser_tier_enabled": {
+            "default": false,
+            "title": "Browser Tier Enabled",
+            "type": "boolean"
           },
           "crawl_delay_max_s": {
             "default": 2.0,
@@ -27,6 +25,12 @@
             "minimum": 0.5,
             "title": "Crawl Delay Min S",
             "type": "number"
+          },
+          "crawler_contact": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Crawler Contact",
+            "type": "string"
           },
           "daily_cap": {
             "default": 25,
@@ -75,6 +79,13 @@
             "title": "Footer Text",
             "type": "string"
           },
+          "global_concurrency": {
+            "default": 30,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Global Concurrency",
+            "type": "integer"
+          },
           "gmail_address": {
             "default": "",
             "title": "Gmail Address",
@@ -122,6 +133,13 @@
             "default": "qwen2.5:3b-instruct",
             "title": "Ollama Model",
             "type": "string"
+          },
+          "page_cache_ttl_days": {
+            "default": 14,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Page Cache Ttl Days",
+            "type": "integer"
           },
           "search_source": {
             "default": "ddgs",
@@ -682,6 +700,25 @@
               }
             ]
           },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "score_reasons": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScoreReason"
+            },
+            "title": "Score Reasons",
+            "type": "array"
+          },
           "search_run_id": {
             "anyOf": [
               {
@@ -704,6 +741,14 @@
             ],
             "title": "Source Url"
           },
+          "sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LeadSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
           "status": {
             "$ref": "#/components/schemas/LeadStatus"
           },
@@ -713,6 +758,14 @@
               "$ref": "#/components/schemas/TimelineItem"
             },
             "title": "Timeline",
+            "type": "array"
+          },
+          "trace": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TraceItem"
+            },
+            "title": "Trace",
             "type": "array"
           },
           "updated_at": {
@@ -745,6 +798,17 @@
             },
             "title": "Confidence",
             "type": "array"
+          },
+          "min_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Score"
           },
           "mode": {
             "items": {
@@ -861,6 +925,17 @@
               }
             ],
             "title": "Role"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
           },
           "search_run_id": {
             "anyOf": [
@@ -995,6 +1070,85 @@
           "started_at"
         ],
         "title": "LeadRun",
+        "type": "object"
+      },
+      "LeadSource": {
+        "properties": {
+          "context_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Snippet"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "page_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Tier"
+          },
+          "page_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Type"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_url"
+        ],
+        "title": "LeadSource",
         "type": "object"
       },
       "LeadStatus": {
@@ -1562,6 +1716,29 @@
         "title": "RunRequest",
         "type": "object"
       },
+      "ScoreReason": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "points",
+          "detail"
+        ],
+        "title": "ScoreReason",
+        "type": "object"
+      },
       "SettingsResponse": {
         "properties": {
           "gmail_password_set": {
@@ -1614,16 +1791,16 @@
             ],
             "title": "Allow Guessed Emails"
           },
-          "crawl_concurrency": {
+          "browser_tier_enabled": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Crawl Concurrency"
+            "title": "Browser Tier Enabled"
           },
           "crawl_delay_max_s": {
             "anyOf": [
@@ -1646,6 +1823,17 @@
               }
             ],
             "title": "Crawl Delay Min S"
+          },
+          "crawler_contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawler Contact"
           },
           "daily_cap": {
             "anyOf": [
@@ -1727,6 +1915,17 @@
             ],
             "title": "Footer Text"
           },
+          "global_concurrency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Global Concurrency"
+          },
           "keep_alive": {
             "anyOf": [
               {
@@ -1792,6 +1991,17 @@
               }
             ],
             "title": "Ollama Model"
+          },
+          "page_cache_ttl_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Cache Ttl Days"
           },
           "search_source": {
             "anyOf": [
@@ -2007,6 +2217,29 @@
           "type"
         ],
         "title": "TimelineItem",
+        "type": "object"
+      },
+      "TraceItem": {
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "kind",
+          "message"
+        ],
+        "title": "TraceItem",
         "type": "object"
       },
       "ValidationError": {
@@ -2302,6 +2535,49 @@
           }
         },
         "summary": "Cancel Run",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/discovery/runs/{run_id}/resume": {
+      "post": {
+        "description": "Continue a cancelled or failed run: only the sites it had not finished are crawled.",
+        "operationId": "resume_run_discovery_runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Run",
         "tags": [
           "discovery"
         ]
@@ -2604,6 +2880,24 @@
           },
           {
             "in": "query",
+            "name": "min_score",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Score"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
@@ -2772,6 +3066,24 @@
                 }
               ],
               "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_score",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Score"
             }
           },
           {

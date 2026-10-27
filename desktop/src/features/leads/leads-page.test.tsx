@@ -149,14 +149,14 @@ describe('LeadsPage', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Closed' }))
     await waitFor(() => expect(calls.some((c) => c.path === '/leads/bulk')).toBe(true))
     expect(calls.find((c) => c.path === '/leads/bulk')?.body).toEqual({
-      action: 'set_status', status: 'closed', filter: { q: '', status: [], mode: [], confidence: ['guessed'], run_id: null },
+      action: 'set_status', status: 'closed', filter: { q: '', status: [], mode: [], confidence: ['guessed'], run_id: null, min_score: null },
     })
   })
 
   it('opens the details drawer for a row', async () => {
     mockApi({
       'GET /leads': { json: page(1) }, 'GET /discovery/runs': { json: RUNS },
-      'GET /leads/1': { json: { ...lead(1), context_snippet: 'Person 1, CTO', run: null, timeline: [] } },
+      'GET /leads/1': { json: { ...lead(1), context_snippet: 'Person 1, CTO', run: null, timeline: [], score_reasons: [], sources: [], trace: [] } },
     })
     renderWithProviders(<LeadsPage />, '/leads')
     await userEvent.click(await screen.findByText('p1@acme.ai'))

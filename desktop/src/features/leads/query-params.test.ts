@@ -6,7 +6,7 @@ const parse = (s: string) => queryFromParams(new URLSearchParams(s))
 
 describe('lead query <-> URL params', () => {
   it('round-trips every filter', () => {
-    const q = { q: 'acme', status: ['new', 'sent'], mode: ['investor'], confidence: ['guessed'], run_id: 7, sort: 'company:asc,name:desc' } as const
+    const q = { q: 'acme', status: ['new', 'sent'], mode: ['investor'], confidence: ['guessed'], run_id: 7, min_score: 60, sort: 'score:desc,name:asc' } as const
     const back = queryFromParams(paramsFromQuery({ ...q, status: [...q.status], mode: [...q.mode], confidence: [...q.confidence] }))
     expect(back).toEqual({ ...q, status: ['new', 'sent'], mode: ['investor'], confidence: ['guessed'] })
   })
@@ -22,6 +22,12 @@ describe('lead query <-> URL params', () => {
     expect(q.confidence).toEqual(['guessed'])
     expect(q.run_id).toBeNull()
     expect(q.sort).toBe('name:asc')
+  })
+
+  it('accepts a minimum score from 1 to 100 and rejects anything else', () => {
+    expect(parse('min=60').min_score).toBe(60)
+    for (const bad of ['0', '-1', '101', '5.5', 'x', '']) expect(parse(`min=${bad}`).min_score).toBeNull()
+    expect(hasFilters({ ...EMPTY_QUERY, min_score: 40 })).toBe(true)
   })
 
   it('rejects non-positive or fractional run ids', () => {

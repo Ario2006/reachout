@@ -2,7 +2,7 @@ import { flexRender, getCoreRowModel, useReactTable, type ColumnDef, type OnChan
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDown, ArrowUp, ExternalLink } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { ConfidenceBadge, StatusBadge } from '@/components/lead-badges'
+import { ConfidenceBadge, ScoreBadge, StatusBadge } from '@/components/lead-badges'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { LeadOut, LeadPatch } from '@/lib/api/types'
 import { relativeTime, safeHttpUrl } from '@/lib/format'
@@ -18,11 +18,12 @@ export interface ColumnMeta { min: number; grow: number; label: string; hideable
 
 export const COLUMN_META: Record<string, ColumnMeta> = {
   select: { min: 40, grow: 0, label: 'Select', hideable: false },
-  name: { min: 140, grow: 1.2, label: 'Name', hideable: false },
-  email: { min: 250, grow: 2, label: 'Email', hideable: false },
-  role: { min: 110, grow: 1, label: 'Role', hideable: true },
-  company: { min: 120, grow: 1, label: 'Company', hideable: true },
-  domain: { min: 110, grow: 0.9, label: 'Source', hideable: true },
+  name: { min: 120, grow: 1.2, label: 'Name', hideable: false },
+  email: { min: 230, grow: 2, label: 'Email', hideable: false },
+  score: { min: 56, grow: 0, label: 'Score', hideable: true },
+  role: { min: 96, grow: 1, label: 'Role', hideable: true },
+  company: { min: 100, grow: 1, label: 'Company', hideable: true },
+  domain: { min: 96, grow: 0.9, label: 'Source', hideable: true },
   status: { min: 84, grow: 0, label: 'Status', hideable: true },
   updated_at: { min: 100, grow: 0, label: 'Last activity', hideable: true },
 }
@@ -67,6 +68,8 @@ const Row = memo(function Row({ lead, index, start, grid, visible, isSelected, o
             <ConfidenceBadge value={lead.email_confidence} />
           </div>
         )
+      case 'score':
+        return <ScoreBadge value={lead.score} />
       case 'role':
         return <EditableCell label="Role" value={lead.role ?? ''} className="block truncate text-sm" onSave={(v) => onEdit(lead.id, { role: v })} />
       case 'company':

@@ -101,6 +101,8 @@ class LeadDraft:
     fetched_at: float = 0.0
     trace_id: str = ""
     trace: list[tuple[str, str]] = field(default_factory=list)  # (kind, message): why this lead exists
+    also: list[dict] = field(default_factory=list)  # other pages that showed the same address: {url, tier, type, fetched_at, snippet}
+    mx_ok: bool | None = None  # None = not checked here
 
 
 @dataclass

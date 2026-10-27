@@ -91,6 +91,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discovery/runs/{run_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Run
+         * @description Continue a cancelled or failed run: only the sites it had not finished are crawled.
+         */
+        post: operations["resume_run_discovery_runs__run_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events": {
         parameters: {
             query?: never;
@@ -455,10 +475,10 @@ export interface components {
              */
             allow_guessed_emails: boolean;
             /**
-             * Crawl Concurrency
-             * @default 4
+             * Browser Tier Enabled
+             * @default false
              */
-            crawl_concurrency: number;
+            browser_tier_enabled: boolean;
             /**
              * Crawl Delay Max S
              * @default 2
@@ -469,6 +489,11 @@ export interface components {
              * @default 1
              */
             crawl_delay_min_s: number;
+            /**
+             * Crawler Contact
+             * @default
+             */
+            crawler_contact: string;
             /**
              * Daily Cap
              * @default 25
@@ -506,6 +531,11 @@ export interface components {
              * @default If you'd rather not hear from me, just reply 'stop' and I won't email again.
              */
             footer_text: string;
+            /**
+             * Global Concurrency
+             * @default 30
+             */
+            global_concurrency: number;
             /**
              * Gmail Address
              * @default
@@ -546,6 +576,11 @@ export interface components {
              * @default qwen2.5:3b-instruct
              */
             ollama_model: string;
+            /**
+             * Page Cache Ttl Days
+             * @default 14
+             */
+            page_cache_ttl_days: number;
             /**
              * Search Source
              * @default ddgs
@@ -747,16 +782,33 @@ export interface components {
             /** Role */
             role?: string | null;
             run?: components["schemas"]["LeadRun"] | null;
+            /** Score */
+            score?: number | null;
+            /**
+             * Score Reasons
+             * @default []
+             */
+            score_reasons: components["schemas"]["ScoreReason"][];
             /** Search Run Id */
             search_run_id?: number | null;
             /** Source Url */
             source_url?: string | null;
+            /**
+             * Sources
+             * @default []
+             */
+            sources: components["schemas"]["LeadSource"][];
             status: components["schemas"]["LeadStatus"];
             /**
              * Timeline
              * @default []
              */
             timeline: components["schemas"]["TimelineItem"][];
+            /**
+             * Trace
+             * @default []
+             */
+            trace: components["schemas"]["TraceItem"][];
             /** Updated At */
             updated_at?: string | null;
         };
@@ -764,6 +816,8 @@ export interface components {
         LeadFilter: {
             /** Confidence */
             confidence?: components["schemas"]["EmailConfidence"][];
+            /** Min Score */
+            min_score?: number | null;
             /** Mode */
             mode?: components["schemas"]["Mode"][];
             /**
@@ -796,6 +850,8 @@ export interface components {
             notes?: string | null;
             /** Role */
             role?: string | null;
+            /** Score */
+            score?: number | null;
             /** Search Run Id */
             search_run_id?: number | null;
             /** Source Url */
@@ -824,6 +880,23 @@ export interface components {
             request_text: string;
             /** Started At */
             started_at: string;
+        };
+        /** LeadSource */
+        LeadSource: {
+            /** Context Snippet */
+            context_snippet?: string | null;
+            /** Fetched At */
+            fetched_at?: number | null;
+            /** First Seen */
+            first_seen?: string | null;
+            /** Page Tier */
+            page_tier?: string | null;
+            /** Page Type */
+            page_type?: string | null;
+            /** Run Id */
+            run_id?: number | null;
+            /** Source Url */
+            source_url: string;
         };
         /**
          * LeadStatus
@@ -1050,6 +1123,15 @@ export interface components {
             /** Request Text */
             request_text: string;
         };
+        /** ScoreReason */
+        ScoreReason: {
+            /** Detail */
+            detail: string;
+            /** Label */
+            label: string;
+            /** Points */
+            points: number;
+        };
         /** SettingsResponse */
         SettingsResponse: {
             /** Gmail Password Set */
@@ -1071,12 +1153,14 @@ export interface components {
         SettingsUpdate: {
             /** Allow Guessed Emails */
             allow_guessed_emails?: boolean | null;
-            /** Crawl Concurrency */
-            crawl_concurrency?: number | null;
+            /** Browser Tier Enabled */
+            browser_tier_enabled?: boolean | null;
             /** Crawl Delay Max S */
             crawl_delay_max_s?: number | null;
             /** Crawl Delay Min S */
             crawl_delay_min_s?: number | null;
+            /** Crawler Contact */
+            crawler_contact?: string | null;
             /** Daily Cap */
             daily_cap?: number | null;
             /** Delay Max S */
@@ -1091,6 +1175,8 @@ export interface components {
             fetch_timeout_s?: number | null;
             /** Footer Text */
             footer_text?: string | null;
+            /** Global Concurrency */
+            global_concurrency?: number | null;
             /** Keep Alive */
             keep_alive?: string | null;
             /** Max Domains Per Run */
@@ -1103,6 +1189,8 @@ export interface components {
             num_ctx?: number | null;
             /** Ollama Model */
             ollama_model?: string | null;
+            /** Page Cache Ttl Days */
+            page_cache_ttl_days?: number | null;
             /** Search Source */
             search_source?: string | null;
             /** Searxng Url */
@@ -1161,6 +1249,15 @@ export interface components {
             detail?: string | null;
             /** Type */
             type: string;
+        };
+        /** TraceItem */
+        TraceItem: {
+            /** At */
+            at: string;
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -1352,6 +1449,37 @@ export interface operations {
             };
         };
     };
+    resume_run_discovery_runs__run_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stream_events_events_get: {
         parameters: {
             query?: never;
@@ -1506,6 +1634,7 @@ export interface operations {
                 mode?: components["schemas"]["Mode"][];
                 confidence?: components["schemas"]["EmailConfidence"][];
                 run_id?: number | null;
+                min_score?: number | null;
                 sort?: string;
                 offset?: number;
                 limit?: number;
@@ -1577,6 +1706,7 @@ export interface operations {
                 mode?: components["schemas"]["Mode"][];
                 confidence?: components["schemas"]["EmailConfidence"][];
                 run_id?: number | null;
+                min_score?: number | null;
                 sort?: string;
             };
             header?: never;

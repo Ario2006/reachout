@@ -213,6 +213,7 @@ class LeadOut(BaseModel):
     created_at: str
     updated_at: Optional[str] = None
     search_run_id: Optional[int] = None
+    score: Optional[int] = None
 
 
 class LeadsPage(BaseModel):
@@ -232,10 +233,35 @@ class LeadRun(BaseModel):
     started_at: str
 
 
+class ScoreReason(BaseModel):
+    label: str
+    points: int
+    detail: str
+
+
+class LeadSource(BaseModel):
+    source_url: str
+    page_tier: Optional[str] = None
+    page_type: Optional[str] = None
+    fetched_at: Optional[float] = None
+    context_snippet: Optional[str] = None
+    first_seen: Optional[str] = None
+    run_id: Optional[int] = None
+
+
+class TraceItem(BaseModel):
+    at: str
+    kind: str
+    message: str
+
+
 class LeadDetail(LeadOut):
     context_snippet: Optional[str] = None
     run: Optional[LeadRun] = None
     timeline: list[TimelineItem] = []
+    score_reasons: list[ScoreReason] = []
+    sources: list[LeadSource] = []
+    trace: list[TraceItem] = []
 
 
 class LeadPatch(BaseModel):

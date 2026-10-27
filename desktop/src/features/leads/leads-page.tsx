@@ -63,7 +63,7 @@ export function LeadsPage() {
 
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [allMatching, setAllMatching] = useState(false)
-  const filterKey = JSON.stringify([query.q, query.status, query.mode, query.confidence, query.run_id])
+  const filterKey = JSON.stringify([query.q, query.status, query.mode, query.confidence, query.run_id, query.min_score])
   useEffect(() => { setSelected(new Set()); setAllMatching(false) }, [filterKey])
 
   const [openId, setOpenId] = useState<number | null>(null)
@@ -114,6 +114,19 @@ export function LeadsPage() {
         <FilterMenu label="Mode" options={MODE_OPTIONS} selected={query.mode} onChange={(v) => setQuery({ mode: v })} />
         <FilterMenu label="Email type" options={CONFIDENCE_OPTIONS} selected={query.confidence} onChange={(v) => setQuery({ confidence: v })} />
         <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant={query.min_score !== null ? 'secondary' : 'outline'} size="sm" aria-label="Filter by minimum score">{query.min_score !== null ? `Score ${query.min_score}+` : 'Score'}</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>Minimum score</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={query.min_score === null ? 'any' : String(query.min_score)} onValueChange={(v) => setQuery({ min_score: v === 'any' ? null : Number(v) })}>
+              <DropdownMenuRadioItem value="any">Any score</DropdownMenuRadioItem>
+              {[40, 60, 80].map((n) => <DropdownMenuRadioItem key={n} value={String(n)}>{n} or more</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant={query.run_id !== null ? 'secondary' : 'outline'} size="sm" aria-label="Filter by search run">{run ? `Search #${run.id}` : query.run_id !== null ? `Search #${query.run_id}` : 'Search run'}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-w-80">
             <DropdownMenuLabel>Leads from</DropdownMenuLabel>
@@ -145,7 +158,7 @@ export function LeadsPage() {
 
       {selected.size > 0 || allMatching ? (
         <BulkBar count={selected.size} total={total} loaded={rows.length} ids={[...selected]} allMatching={allMatching}
-          filter={{ q: query.q, status: query.status, mode: query.mode, confidence: query.confidence, run_id: query.run_id }}
+          filter={{ q: query.q, status: query.status, mode: query.mode, confidence: query.confidence, run_id: query.run_id, min_score: query.min_score }}
           onSelectAllMatching={() => setAllMatching(true)} onClear={() => { setSelected(new Set()); setAllMatching(false) }} />
       ) : null}
 
