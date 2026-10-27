@@ -1,6 +1,41 @@
 {
   "components": {
     "schemas": {
+      "ActivityItem": {
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lead_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Id"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "kind",
+          "text",
+          "lead_id"
+        ],
+        "title": "ActivityItem",
+        "type": "object"
+      },
       "AppSettings": {
         "description": "Everything here is stored in the SQLite `settings` table. Never add secrets.",
         "properties": {
@@ -8,6 +43,19 @@
             "default": false,
             "title": "Allow Guessed Emails",
             "type": "boolean"
+          },
+          "bounce_pause_min_sends": {
+            "default": 20,
+            "minimum": 1.0,
+            "title": "Bounce Pause Min Sends",
+            "type": "integer"
+          },
+          "bounce_pause_pct": {
+            "default": 5.0,
+            "maximum": 100.0,
+            "minimum": 0.5,
+            "title": "Bounce Pause Pct",
+            "type": "number"
           },
           "browser_tier_enabled": {
             "default": false,
@@ -90,6 +138,13 @@
             "default": "",
             "title": "Gmail Address",
             "type": "string"
+          },
+          "imap_poll_minutes": {
+            "default": 10,
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Imap Poll Minutes",
+            "type": "integer"
           },
           "keep_alive": {
             "default": "5m",
@@ -199,6 +254,104 @@
         "title": "AppSettings",
         "type": "object"
       },
+      "AttentionItem": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "bounce_rate",
+              "needs_review",
+              "unread_replies",
+              "followups_due",
+              "needs_confirmation",
+              "opt_out_to_confirm",
+              "campaign_paused",
+              "gmail_login"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "severity",
+          "message",
+          "count",
+          "link"
+        ],
+        "title": "AttentionItem",
+        "type": "object"
+      },
+      "BulkApproveIn": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "integer"
+          },
+          "draft_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Ids"
+          },
+          "only_unflagged": {
+            "default": true,
+            "title": "Only Unflagged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "campaign_id"
+        ],
+        "title": "BulkApproveIn",
+        "type": "object"
+      },
+      "BulkApproveOut": {
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "skipped_flagged": {
+            "title": "Skipped Flagged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "approved",
+          "skipped_flagged"
+        ],
+        "title": "BulkApproveOut",
+        "type": "object"
+      },
       "BulkRequest": {
         "properties": {
           "action": {
@@ -269,6 +422,469 @@
         "title": "BulkResult",
         "type": "object"
       },
+      "CampaignCounts": {
+        "properties": {
+          "drafts_approved": {
+            "default": 0,
+            "title": "Drafts Approved",
+            "type": "integer"
+          },
+          "drafts_needs_review": {
+            "default": 0,
+            "title": "Drafts Needs Review",
+            "type": "integer"
+          },
+          "drafts_pending": {
+            "default": 0,
+            "title": "Drafts Pending",
+            "type": "integer"
+          },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "needs_confirmation": {
+            "default": 0,
+            "title": "Needs Confirmation",
+            "type": "integer"
+          },
+          "queued": {
+            "default": 0,
+            "title": "Queued",
+            "type": "integer"
+          },
+          "sending": {
+            "default": 0,
+            "title": "Sending",
+            "type": "integer"
+          },
+          "sent": {
+            "default": 0,
+            "title": "Sent",
+            "type": "integer"
+          }
+        },
+        "title": "CampaignCounts",
+        "type": "object"
+      },
+      "CampaignIn": {
+        "properties": {
+          "attachment_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Path"
+          },
+          "daily_cap": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Daily Cap",
+            "type": "integer"
+          },
+          "delay_max_s": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Max S"
+          },
+          "delay_min_s": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Min S"
+          },
+          "followup_days": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "title": "Followup Days",
+            "type": "array"
+          },
+          "followups_enabled": {
+            "default": false,
+            "title": "Followups Enabled",
+            "type": "boolean"
+          },
+          "followups_require_approval": {
+            "default": false,
+            "title": "Followups Require Approval",
+            "type": "boolean"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "window_end": {
+            "default": "18:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "default": "09:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CampaignIn",
+        "type": "object"
+      },
+      "CampaignOut": {
+        "properties": {
+          "attachment_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Path"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/CampaignCounts"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "daily_cap": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Daily Cap",
+            "type": "integer"
+          },
+          "delay_max_s": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Max S"
+          },
+          "delay_min_s": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Min S"
+          },
+          "dry_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dry Run At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "followup_days": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "title": "Followup Days",
+            "type": "array"
+          },
+          "followups_enabled": {
+            "default": false,
+            "title": "Followups Enabled",
+            "type": "boolean"
+          },
+          "followups_require_approval": {
+            "default": false,
+            "title": "Followups Require Approval",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "next_send_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Send At"
+          },
+          "pause_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Reason"
+          },
+          "paused_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "bounce_rate",
+                  "smtp_login",
+                  "shutdown",
+                  "all"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused By"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "running",
+              "paused",
+              "done"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "test_sent_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Sent At"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "window_end": {
+            "default": "18:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "default": "09:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "state",
+          "pause_reason",
+          "paused_by",
+          "next_send_at",
+          "test_sent_at",
+          "dry_run_at",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "counts"
+        ],
+        "title": "CampaignOut",
+        "type": "object"
+      },
+      "CampaignStats": {
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "bounce_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bounce Rate"
+          },
+          "bounced": {
+            "title": "Bounced",
+            "type": "integer"
+          },
+          "daily_cap_effective": {
+            "title": "Daily Cap Effective",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "needs_confirmation": {
+            "title": "Needs Confirmation",
+            "type": "integer"
+          },
+          "next_send_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Send At"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "replied": {
+            "title": "Replied",
+            "type": "integer"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "integer"
+          },
+          "sent_today": {
+            "title": "Sent Today",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "approved",
+          "queued",
+          "sent",
+          "failed",
+          "needs_confirmation",
+          "bounced",
+          "replied",
+          "sent_today",
+          "daily_cap_effective",
+          "bounce_rate",
+          "next_send_at"
+        ],
+        "title": "CampaignStats",
+        "type": "object"
+      },
       "CheckOut": {
         "properties": {
           "detail": {
@@ -328,6 +944,462 @@
         "title": "CompleteSetup",
         "type": "object"
       },
+      "ConfirmMessageIn": {
+        "properties": {
+          "was_sent": {
+            "title": "Was Sent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "was_sent"
+        ],
+        "title": "ConfirmMessageIn",
+        "type": "object"
+      },
+      "DayCount": {
+        "properties": {
+          "bounces": {
+            "default": 0,
+            "title": "Bounces",
+            "type": "integer"
+          },
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "replies": {
+            "default": 0,
+            "title": "Replies",
+            "type": "integer"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "sent"
+        ],
+        "title": "DayCount",
+        "type": "object"
+      },
+      "DraftCounts": {
+        "properties": {
+          "approved": {
+            "default": 0,
+            "title": "Approved",
+            "type": "integer"
+          },
+          "needs_review": {
+            "default": 0,
+            "title": "Needs Review",
+            "type": "integer"
+          },
+          "pending": {
+            "default": 0,
+            "title": "Pending",
+            "type": "integer"
+          },
+          "rejected": {
+            "default": 0,
+            "title": "Rejected",
+            "type": "integer"
+          }
+        },
+        "title": "DraftCounts",
+        "type": "object"
+      },
+      "DraftDetail": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "integer"
+          },
+          "final_text": {
+            "title": "Final Text",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/DraftFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "initial",
+              "followup_1",
+              "followup_2"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lead": {
+            "$ref": "#/components/schemas/DraftLead"
+          },
+          "opener": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opener"
+          },
+          "opener_source": {
+            "enum": [
+              "llm",
+              "fallback",
+              "manual",
+              "none"
+            ],
+            "title": "Opener Source",
+            "type": "string"
+          },
+          "opener_span": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextSpan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "needs_review",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "campaign_id",
+          "kind",
+          "lead",
+          "subject",
+          "body",
+          "opener",
+          "opener_source",
+          "opener_span",
+          "flags",
+          "status",
+          "updated_at",
+          "final_text"
+        ],
+        "title": "DraftDetail",
+        "type": "object"
+      },
+      "DraftFlag": {
+        "properties": {
+          "code": {
+            "enum": [
+              "needs_review",
+              "opener_fallback",
+              "banned_phrase",
+              "too_long",
+              "unsupported_fact",
+              "missing_field",
+              "guessed_email",
+              "no_context",
+              "edited"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "DraftFlag",
+        "type": "object"
+      },
+      "DraftLead": {
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "context_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Snippet"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "email_confidence": {
+            "$ref": "#/components/schemas/EmailConfidence"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "company",
+          "email_confidence",
+          "context_snippet",
+          "source_url"
+        ],
+        "title": "DraftLead",
+        "type": "object"
+      },
+      "DraftOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "integer"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/DraftFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "initial",
+              "followup_1",
+              "followup_2"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lead": {
+            "$ref": "#/components/schemas/DraftLead"
+          },
+          "opener": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opener"
+          },
+          "opener_source": {
+            "enum": [
+              "llm",
+              "fallback",
+              "manual",
+              "none"
+            ],
+            "title": "Opener Source",
+            "type": "string"
+          },
+          "opener_span": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextSpan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "needs_review",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "campaign_id",
+          "kind",
+          "lead",
+          "subject",
+          "body",
+          "opener",
+          "opener_source",
+          "opener_span",
+          "flags",
+          "status",
+          "updated_at"
+        ],
+        "title": "DraftOut",
+        "type": "object"
+      },
+      "DraftPatch": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 6000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "title": "DraftPatch",
+        "type": "object"
+      },
+      "DraftsPage": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/DraftCounts"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DraftOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "counts"
+        ],
+        "title": "DraftsPage",
+        "type": "object"
+      },
       "EmailConfidence": {
         "enum": [
           "published_personal",
@@ -336,6 +1408,184 @@
         ],
         "title": "EmailConfidence",
         "type": "string"
+      },
+      "FollowupPlan": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "integer"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/FollowupRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "rows",
+          "counts"
+        ],
+        "title": "FollowupPlan",
+        "type": "object"
+      },
+      "FollowupRow": {
+        "properties": {
+          "due_at": {
+            "title": "Due At",
+            "type": "number"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "followup_1",
+              "followup_2"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lead_id": {
+            "title": "Lead Id",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "enum": [
+              "waiting",
+              "due",
+              "awaiting_approval",
+              "queued",
+              "sent",
+              "skipped"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lead_id",
+          "name",
+          "email",
+          "kind",
+          "due_at",
+          "state",
+          "reason"
+        ],
+        "title": "FollowupRow",
+        "type": "object"
+      },
+      "FollowupSkipIn": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "followup_1",
+              "followup_2"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lead_id": {
+            "title": "Lead Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lead_id",
+          "kind"
+        ],
+        "title": "FollowupSkipIn",
+        "type": "object"
+      },
+      "FunnelStage": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "stage": {
+            "enum": [
+              "leads",
+              "drafted",
+              "approved",
+              "sent",
+              "delivered",
+              "replied"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "count"
+        ],
+        "title": "FunnelStage",
+        "type": "object"
+      },
+      "GenerateDraftsIn": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "integer"
+          },
+          "lead_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Ids"
+          },
+          "regenerate": {
+            "default": false,
+            "title": "Regenerate",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "campaign_id"
+        ],
+        "title": "GenerateDraftsIn",
+        "type": "object"
       },
       "GmailStatus": {
         "properties": {
@@ -511,6 +1761,55 @@
         "title": "ImportReportOut",
         "type": "object"
       },
+      "InboxStatus": {
+        "properties": {
+          "checking": {
+            "title": "Checking",
+            "type": "boolean"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "next_check_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Check At"
+          }
+        },
+        "required": [
+          "last_checked_at",
+          "next_check_at",
+          "last_error",
+          "checking"
+        ],
+        "title": "InboxStatus",
+        "type": "object"
+      },
       "JobOut": {
         "properties": {
           "cancel_requested": {
@@ -614,6 +1913,93 @@
           "created_at"
         ],
         "title": "JobOut",
+        "type": "object"
+      },
+      "Kpis": {
+        "properties": {
+          "awaiting_followup": {
+            "title": "Awaiting Followup",
+            "type": "integer"
+          },
+          "bounce_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bounce Rate"
+          },
+          "bounced": {
+            "title": "Bounced",
+            "type": "integer"
+          },
+          "daily_cap": {
+            "title": "Daily Cap",
+            "type": "integer"
+          },
+          "delivered": {
+            "title": "Delivered",
+            "type": "integer"
+          },
+          "drafts_awaiting_review": {
+            "title": "Drafts Awaiting Review",
+            "type": "integer"
+          },
+          "followups_sent": {
+            "title": "Followups Sent",
+            "type": "integer"
+          },
+          "leads": {
+            "title": "Leads",
+            "type": "integer"
+          },
+          "opted_out": {
+            "title": "Opted Out",
+            "type": "integer"
+          },
+          "replies": {
+            "title": "Replies",
+            "type": "integer"
+          },
+          "reply_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Rate"
+          },
+          "sent_today": {
+            "title": "Sent Today",
+            "type": "integer"
+          },
+          "sent_total": {
+            "title": "Sent Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "leads",
+          "drafts_awaiting_review",
+          "sent_today",
+          "daily_cap",
+          "sent_total",
+          "replies",
+          "reply_rate",
+          "bounce_rate",
+          "bounced",
+          "opted_out",
+          "followups_sent",
+          "awaiting_followup",
+          "delivered"
+        ],
+        "title": "Kpis",
         "type": "object"
       },
       "LeadDetail": {
@@ -1186,6 +2572,49 @@
         "title": "LeadStatus",
         "type": "string"
       },
+      "LeadStatusIn": {
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "interested",
+                  "not_interested",
+                  "meeting_booked"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "LeadStatusIn",
+        "type": "object"
+      },
       "LeadsPage": {
         "properties": {
           "items": {
@@ -1218,6 +2647,146 @@
           "hard_daily_ceiling"
         ],
         "title": "Limits",
+        "type": "object"
+      },
+      "MessageOut": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "initial",
+              "followup_1",
+              "followup_2"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lead_id": {
+            "title": "Lead Id",
+            "type": "integer"
+          },
+          "lead_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Name"
+          },
+          "recipient_email": {
+            "title": "Recipient Email",
+            "type": "string"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "sending",
+              "sent",
+              "failed",
+              "needs_confirmation",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "id",
+          "campaign_id",
+          "lead_id",
+          "lead_name",
+          "recipient_email",
+          "kind",
+          "state",
+          "subject",
+          "sent_at",
+          "error"
+        ],
+        "title": "MessageOut",
+        "type": "object"
+      },
+      "Metrics": {
+        "properties": {
+          "attention": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionItem"
+            },
+            "title": "Attention",
+            "type": "array"
+          },
+          "funnel": {
+            "items": {
+              "$ref": "#/components/schemas/FunnelStage"
+            },
+            "title": "Funnel",
+            "type": "array"
+          },
+          "kpis": {
+            "$ref": "#/components/schemas/Kpis"
+          },
+          "opens_note": {
+            "default": "Opens are not tracked: it is unreliable and would need a public server.",
+            "title": "Opens Note",
+            "type": "string"
+          },
+          "per_day": {
+            "items": {
+              "$ref": "#/components/schemas/DayCount"
+            },
+            "title": "Per Day",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kpis",
+          "funnel",
+          "per_day",
+          "attention"
+        ],
+        "title": "Metrics",
         "type": "object"
       },
       "Mode": {
@@ -1354,6 +2923,74 @@
         "title": "PlanResponse",
         "type": "object"
       },
+      "ProfileField": {
+        "properties": {
+          "key": {
+            "maxLength": 40,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 2000,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value"
+        ],
+        "title": "ProfileField",
+        "type": "object"
+      },
+      "ProfileOut": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "reserved": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reserved",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fields",
+          "reserved"
+        ],
+        "title": "ProfileOut",
+        "type": "object"
+      },
+      "ProfilePut": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileField"
+            },
+            "title": "Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "title": "ProfilePut",
+        "type": "object"
+      },
       "PullModelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1370,6 +3007,62 @@
           }
         },
         "title": "PullModelRequest",
+        "type": "object"
+      },
+      "Readiness": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "ready"
+        ],
+        "title": "Readiness",
+        "type": "object"
+      },
+      "ReadinessItem": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "gmail",
+              "approved_drafts",
+              "attachment",
+              "test_sent",
+              "needs_confirmation"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "ok",
+          "detail"
+        ],
+        "title": "ReadinessItem",
         "type": "object"
       },
       "RunDetail": {
@@ -1758,6 +3451,56 @@
         "title": "ScoreReason",
         "type": "object"
       },
+      "SendingStatus": {
+        "properties": {
+          "caffeinate_active": {
+            "title": "Caffeinate Active",
+            "type": "boolean"
+          },
+          "cap": {
+            "title": "Cap",
+            "type": "integer"
+          },
+          "in_flight": {
+            "title": "In Flight",
+            "type": "integer"
+          },
+          "next_send_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Send At"
+          },
+          "paused_all": {
+            "title": "Paused All",
+            "type": "boolean"
+          },
+          "sent_today": {
+            "title": "Sent Today",
+            "type": "integer"
+          },
+          "worker_alive": {
+            "title": "Worker Alive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused_all",
+          "sent_today",
+          "cap",
+          "in_flight",
+          "next_send_at",
+          "worker_alive",
+          "caffeinate_active"
+        ],
+        "title": "SendingStatus",
+        "type": "object"
+      },
       "SettingsResponse": {
         "properties": {
           "gmail_password_set": {
@@ -1809,6 +3552,28 @@
               }
             ],
             "title": "Allow Guessed Emails"
+          },
+          "bounce_pause_min_sends": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bounce Pause Min Sends"
+          },
+          "bounce_pause_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bounce Pause Pct"
           },
           "browser_tier_enabled": {
             "anyOf": [
@@ -1944,6 +3709,17 @@
               }
             ],
             "title": "Global Concurrency"
+          },
+          "imap_poll_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Poll Minutes"
           },
           "keep_alive": {
             "anyOf": [
@@ -2236,6 +4012,585 @@
         "title": "SuppressionEntry",
         "type": "object"
       },
+      "TemplateIn": {
+        "properties": {
+          "body": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "followup_1_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followup 1 Body"
+          },
+          "followup_2_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followup 2 Body"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "subject",
+          "body"
+        ],
+        "title": "TemplateIn",
+        "type": "object"
+      },
+      "TemplateOut": {
+        "properties": {
+          "body": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "followup_1_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followup 1 Body"
+          },
+          "followup_2_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followup 2 Body"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_starter": {
+            "title": "Is Starter",
+            "type": "boolean"
+          },
+          "merge_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Merge Fields",
+            "type": "array"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "subject",
+          "body",
+          "id",
+          "is_starter",
+          "merge_fields",
+          "updated_at"
+        ],
+        "title": "TemplateOut",
+        "type": "object"
+      },
+      "TemplatePreview": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "final_text": {
+            "title": "Final Text",
+            "type": "string"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "opener_span": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextSpan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "word_count": {
+            "title": "Word Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subject",
+          "body",
+          "final_text",
+          "missing_fields",
+          "word_count"
+        ],
+        "title": "TemplatePreview",
+        "type": "object"
+      },
+      "TemplatePreviewIn": {
+        "properties": {
+          "lead_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Id"
+          },
+          "template": {
+            "$ref": "#/components/schemas/TemplateIn"
+          }
+        },
+        "required": [
+          "template"
+        ],
+        "title": "TemplatePreviewIn",
+        "type": "object"
+      },
+      "TestSendOut": {
+        "properties": {
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "message_id"
+        ],
+        "title": "TestSendOut",
+        "type": "object"
+      },
+      "TextSpan": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TextSpan",
+        "type": "object"
+      },
+      "ThreadDetail": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "gmail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gmail Url"
+          },
+          "lead": {
+            "$ref": "#/components/schemas/ThreadLead"
+          }
+        },
+        "required": [
+          "lead",
+          "entries",
+          "gmail_url"
+        ],
+        "title": "ThreadDetail",
+        "type": "object"
+      },
+      "ThreadEntry": {
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "kind": {
+            "enum": [
+              "sent",
+              "reply",
+              "bounce",
+              "auto_reply",
+              "opt_out"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "message_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "sending",
+                  "sent",
+                  "failed",
+                  "needs_confirmation",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message State"
+          },
+          "needs_confirmation": {
+            "default": false,
+            "title": "Needs Confirmation",
+            "type": "boolean"
+          },
+          "send_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "initial",
+                  "followup_1",
+                  "followup_2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Send Kind"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "unread": {
+            "default": false,
+            "title": "Unread",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "subject",
+          "text"
+        ],
+        "title": "ThreadEntry",
+        "type": "object"
+      },
+      "ThreadLead": {
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "email_confidence": {
+            "$ref": "#/components/schemas/EmailConfidence"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "interested",
+                  "not_interested",
+                  "meeting_booked"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LeadStatus"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "company",
+          "role",
+          "email_confidence",
+          "status",
+          "outcome"
+        ],
+        "title": "ThreadLead",
+        "type": "object"
+      },
+      "ThreadSummary": {
+        "properties": {
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
+          "last_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sent",
+                  "reply",
+                  "bounce",
+                  "auto_reply",
+                  "opt_out"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Kind"
+          },
+          "lead": {
+            "$ref": "#/components/schemas/ThreadLead"
+          },
+          "opt_out_to_confirm": {
+            "title": "Opt Out To Confirm",
+            "type": "boolean"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lead",
+          "last_activity_at",
+          "last_kind",
+          "snippet",
+          "unread",
+          "opt_out_to_confirm"
+        ],
+        "title": "ThreadSummary",
+        "type": "object"
+      },
+      "ThreadsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unread_total": {
+            "title": "Unread Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unread_total"
+        ],
+        "title": "ThreadsPage",
+        "type": "object"
+      },
       "TimelineItem": {
         "properties": {
           "at": {
@@ -2377,6 +4732,695 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/activity": {
+      "get": {
+        "operationId": "activity_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ActivityItem"
+                  },
+                  "title": "Response Activity Activity Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activity",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/campaigns": {
+      "get": {
+        "operationId": "list_campaigns_campaigns_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CampaignOut"
+                  },
+                  "title": "Response List Campaigns Campaigns Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Campaigns",
+        "tags": [
+          "campaigns"
+        ]
+      },
+      "post": {
+        "operationId": "create_campaign_campaigns_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Campaign",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}": {
+      "delete": {
+        "operationId": "delete_campaign_campaigns__campaign_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Campaign",
+        "tags": [
+          "campaigns"
+        ]
+      },
+      "get": {
+        "operationId": "get_campaign_campaigns__campaign_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Campaign",
+        "tags": [
+          "campaigns"
+        ]
+      },
+      "put": {
+        "operationId": "update_campaign_campaigns__campaign_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Campaign",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/dry-run": {
+      "post": {
+        "description": "Job that runs every send-safety check for each approved draft and logs the decision. Sends nothing.",
+        "operationId": "dry_run_campaigns__campaign_id__dry_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dry Run",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/followups": {
+      "get": {
+        "operationId": "followup_plan_campaigns__campaign_id__followups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowupPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Followup Plan",
+        "tags": [
+          "followups"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/followups/skip": {
+      "post": {
+        "operationId": "skip_followup_campaigns__campaign_id__followups_skip_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowupSkipIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Skip Followup",
+        "tags": [
+          "followups"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/messages": {
+      "get": {
+        "operationId": "messages_campaigns__campaign_id__messages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "sending",
+                    "sent",
+                    "failed",
+                    "needs_confirmation",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MessageOut"
+                  },
+                  "title": "Response Messages Campaigns  Campaign Id  Messages Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Messages",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/pause": {
+      "post": {
+        "operationId": "pause_campaigns__campaign_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/readiness": {
+      "get": {
+        "operationId": "readiness_campaigns__campaign_id__readiness_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Readiness",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/resume": {
+      "post": {
+        "operationId": "resume_campaigns__campaign_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/start": {
+      "post": {
+        "operationId": "start_campaigns__campaign_id__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/stats": {
+      "get": {
+        "operationId": "stats_campaigns__campaign_id__stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stats",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/test-send": {
+      "post": {
+        "description": "Sends the first approved draft to the user's own Gmail address, with the footer, through the real mailer.",
+        "operationId": "test_send_campaigns__campaign_id__test_send_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSendOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Send",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
     "/discovery/plan": {
       "post": {
         "description": "Turn a plain-English request into an editable plan. Falls back to templates if the model is down.",
@@ -2635,6 +5679,338 @@
         ]
       }
     },
+    "/drafts": {
+      "get": {
+        "operationId": "list_drafts_drafts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "title": "Campaign Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "flagged",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Flagged"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "enum": [
+                        "pending",
+                        "needs_review",
+                        "approved",
+                        "rejected"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Status"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Drafts",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/drafts/bulk-approve": {
+      "post": {
+        "operationId": "bulk_approve_drafts_bulk_approve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkApproveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkApproveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Approve",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/drafts/generate": {
+      "post": {
+        "description": "Starts the `drafts_generate` job (progress over SSE, `draft` events as each draft lands).",
+        "operationId": "generate_drafts_drafts_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateDraftsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Drafts",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/drafts/{draft_id}": {
+      "get": {
+        "operationId": "get_draft_drafts__draft_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Draft",
+        "tags": [
+          "compose"
+        ]
+      },
+      "patch": {
+        "description": "Edit and/or approve/reject. Editing an approved draft withdraws the approval (DB trigger).",
+        "operationId": "patch_draft_drafts__draft_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Draft",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/drafts/{draft_id}/regenerate-opener": {
+      "post": {
+        "operationId": "regenerate_opener_drafts__draft_id__regenerate_opener_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Regenerate Opener",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
     "/events": {
       "get": {
         "description": "New events only by default; send Last-Event-ID to resume after a reconnect.",
@@ -2683,6 +6059,42 @@
         ]
       }
     },
+    "/events/{event_id}/confirm-opt-out": {
+      "post": {
+        "description": "The user checked the automatic opt-out detection and agrees. The address is already suppressed.",
+        "operationId": "confirm_opt_out_events__event_id__confirm_opt_out_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Opt Out",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health_health_get",
@@ -2701,6 +6113,49 @@
         "summary": "Health",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/inbox/check-now": {
+      "post": {
+        "description": "Starts the `inbox_check` job (the same code the 10-minute poller runs).",
+        "operationId": "check_now_inbox_check_now_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Check Now",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
+    "/inbox/status": {
+      "get": {
+        "operationId": "inbox_status_inbox_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Inbox Status",
+        "tags": [
+          "inbox"
         ]
       }
     },
@@ -3311,6 +6766,343 @@
         ]
       }
     },
+    "/leads/{lead_id}/status": {
+      "post": {
+        "description": "Manual status / outcome / notes. Moving a lead to a blocking status (closed, opted_out, ...) stops all\nfurther emails to it; it can never un-suppress an address.",
+        "operationId": "set_lead_status_leads__lead_id__status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lead_id",
+            "required": true,
+            "schema": {
+              "title": "Lead Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadStatusIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadLead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Lead Status",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
+    "/messages/{message_id}/confirm": {
+      "post": {
+        "description": "needs_confirmation -> sent or failed, by the user's word. Never resends.",
+        "operationId": "confirm_message_messages__message_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmMessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Message",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/messages/{message_id}/retry": {
+      "post": {
+        "description": "failed -> queued (only failures where the server never accepted the message).",
+        "operationId": "retry_message_messages__message_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Message",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "metrics_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "campaign_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campaign Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "default": "30d",
+              "enum": [
+                "7d",
+                "30d",
+                "all"
+              ],
+              "title": "Range",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metrics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Metrics",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/profile": {
+      "get": {
+        "operationId": "get_profile_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Profile",
+        "tags": [
+          "compose"
+        ]
+      },
+      "put": {
+        "operationId": "put_profile_profile_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Profile",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/sending/pause-all": {
+      "post": {
+        "description": "Also called by Electron on Quit so sending stops cleanly before the processes exit.",
+        "operationId": "pause_all_sending_pause_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendingStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Pause All",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/sending/resume-all": {
+      "post": {
+        "operationId": "resume_all_sending_resume_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendingStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Resume All",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
+    "/sending/status": {
+      "get": {
+        "operationId": "sending_status_sending_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendingStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sending Status",
+        "tags": [
+          "campaigns"
+        ]
+      }
+    },
     "/settings": {
       "get": {
         "operationId": "get_settings_settings_get",
@@ -3736,6 +7528,338 @@
         "summary": "Add Suppression",
         "tags": [
           "suppression"
+        ]
+      }
+    },
+    "/templates": {
+      "get": {
+        "description": "Seeds the three starter templates on first call.",
+        "operationId": "list_templates_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateOut"
+                  },
+                  "title": "Response List Templates Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Templates",
+        "tags": [
+          "compose"
+        ]
+      },
+      "post": {
+        "operationId": "create_template_templates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Template",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/templates/preview": {
+      "post": {
+        "operationId": "preview_template_templates_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplatePreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Template",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/templates/{template_id}": {
+      "delete": {
+        "operationId": "delete_template_templates__template_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Template",
+        "tags": [
+          "compose"
+        ]
+      },
+      "put": {
+        "operationId": "update_template_templates__template_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Template",
+        "tags": [
+          "compose"
+        ]
+      }
+    },
+    "/threads": {
+      "get": {
+        "operationId": "list_threads_threads_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "unread",
+                "replied",
+                "bounced",
+                "opt_out",
+                "auto_reply",
+                "sent"
+              ],
+              "title": "Filter",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "campaign_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campaign Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Threads",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
+    "/threads/{lead_id}": {
+      "get": {
+        "description": "Opening a thread marks its incoming events read.",
+        "operationId": "get_thread_threads__lead_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lead_id",
+            "required": true,
+            "schema": {
+              "title": "Lead Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread",
+        "tags": [
+          "inbox"
         ]
       }
     }

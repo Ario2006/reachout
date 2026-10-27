@@ -3,6 +3,8 @@ import { useEffect, type ReactNode } from 'react'
 import { getConnection } from './backend'
 import { jobEventSchema, TERMINAL, useLive } from './jobs-store'
 import { qk } from './api/hooks'
+import { K } from './api/keys'
+import { campaignEventSchema, draftEventSchema, inboxEventSchema, messageEventSchema, sendingEventSchema } from './event-types'
 import { domainEventSchema, logEventSchema, runEventSchema, useLiveRuns } from './runs-store'
 import { streamEvents } from './sse'
 
@@ -58,6 +60,38 @@ export function EventsProvider({ children }: { children: ReactNode }) {
                 if (l.success) runs.applyLog(l.data)
                 return
               }
+              // Milestone 3-6 events carry hints only: invalidate by key prefix and let each screen refetch.
+              case 'draft':
+                if (draftEventSchema.safeParse(payload).success) void qc.invalidateQueries({ queryKey: K.drafts })
+                return
+              case 'campaign':
+                if (campaignEventSchema.safeParse(payload).success) {
+                  void qc.invalidateQueries({ queryKey: K.campaigns })
+                  void qc.invalidateQueries({ queryKey: K.sending })
+                  void qc.invalidateQueries({ queryKey: K.metrics })
+                }
+                return
+              case 'message':
+                if (messageEventSchema.safeParse(payload).success) {
+                  void qc.invalidateQueries({ queryKey: K.campaigns })
+                  void qc.invalidateQueries({ queryKey: K.threads })
+                  void qc.invalidateQueries({ queryKey: K.followups })
+                  void qc.invalidateQueries({ queryKey: K.metrics })
+                  void qc.invalidateQueries({ queryKey: K.activity })
+                }
+                return
+              case 'inbox':
+                if (inboxEventSchema.safeParse(payload).success) {
+                  void qc.invalidateQueries({ queryKey: K.threads })
+                  void qc.invalidateQueries({ queryKey: K.inboxStatus })
+                  void qc.invalidateQueries({ queryKey: K.metrics })
+                  void qc.invalidateQueries({ queryKey: K.activity })
+                  runs.bumpLeads()
+                }
+                return
+              case 'sending':
+                if (sendingEventSchema.safeParse(payload).success) void qc.invalidateQueries({ queryKey: K.sending })
+                return
               case 'lead':
               case 'lead.updated':
                 runs.bumpLeads()

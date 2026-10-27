@@ -19,6 +19,7 @@ export function settingsFixture(over: Partial<components['schemas']['AppSettings
       daily_cap: 25, delay_min_s: 60, delay_max_s: 180, window_start: '09:00', window_end: '18:00',
       send_days: [0, 1, 2, 3, 4, 5], allow_guessed_emails: false,
       max_per_domain_per_day: 2, min_minutes_between_same_domain: 60, use_recipient_timezone: true,
+      bounce_pause_pct: 5, bounce_pause_min_sends: 20, imap_poll_minutes: 10,
       max_pages_per_domain: 6, crawl_delay_min_s: 1, crawl_delay_max_s: 2, fetch_timeout_s: 15,
       search_source: 'ddgs', searxng_url: '', global_concurrency: 30, page_cache_ttl_days: 14, crawler_contact: '', browser_tier_enabled: false, max_domains_per_run: 60, max_leads_per_site: 5, target_leads: 30, domain_blocklist_extra: [],
       first_run_complete: true, legal_acknowledged: true,

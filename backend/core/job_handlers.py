@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from backend.core import db, llm
+from backend.core.drafts import run_generate_drafts
+from backend.core.inbox_poller import run_inbox_check
+from backend.core.sender import run_campaign_dry_run
 from backend.core.pipeline import run_discovery
 from backend.core.jobs import Handler, JobContext
 
@@ -19,4 +22,10 @@ def pull_model(ctx: JobContext, payload: dict) -> dict:
     return {"model": model}
 
 
-HANDLERS: dict[str, Handler] = {"pull_model": pull_model, "discovery_run": run_discovery}
+HANDLERS: dict[str, Handler] = {
+    "pull_model": pull_model,
+    "discovery_run": run_discovery,
+    "drafts_generate": run_generate_drafts,
+    "inbox_check": run_inbox_check,
+    "campaign_dry_run": run_campaign_dry_run,
+}

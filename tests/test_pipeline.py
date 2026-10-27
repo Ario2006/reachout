@@ -209,6 +209,7 @@ def test_one_crashing_site_does_not_stop_the_run(world, monkeypatch):
     assert "priya@acme.ai" in by_email(world.engine, run_id)
 
 
+@pytest.mark.slow
 def test_a_server_error_site_is_recorded_and_the_run_goes_on(world):
     world.web.routes["only-info.com/"] = httpx.Response(500)
     run_id, job = start(world.engine)
@@ -374,6 +375,7 @@ def test_cancel_stops_quickly_and_keeps_partial_results(world, monkeypatch):
     assert len(by_email(world.engine, run["id"])) == r["stats"]["leads_new"] > 0  # what was found is kept
 
 
+@pytest.mark.slow
 def test_a_cancelled_run_resumes_where_it_stopped_without_refetching(world, monkeypatch):
     _many_sites(world, monkeypatch)
     world.web.delay = 0.02

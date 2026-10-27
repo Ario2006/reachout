@@ -60,6 +60,9 @@ class AppSettings(BaseModel):
     max_per_domain_per_day: int = Field(2, ge=1, le=10)  # emails to one company domain per day, all campaigns together
     min_minutes_between_same_domain: int = Field(60, ge=0, le=1440)  # gap between two people at the same company
     use_recipient_timezone: bool = True  # judge the send window in the recipient's time zone when it can be inferred
+    bounce_pause_pct: float = Field(5.0, ge=0.5, le=100)  # auto-pause a campaign above this bounce rate...
+    bounce_pause_min_sends: int = Field(20, ge=1)  # ...once at least this many emails went out
+    imap_poll_minutes: int = Field(10, ge=1, le=120)
 
     # Crawl / search
     max_pages_per_domain: int = Field(6, ge=1, le=20)

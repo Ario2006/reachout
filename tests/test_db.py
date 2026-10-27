@@ -8,16 +8,17 @@ from backend.core import db
 
 def test_migrations_apply_and_are_idempotent(home):
     eng = db.get_engine()
-    assert db.migrate(eng) == [1, 2, 3, 4]
+    versions = [v for v, _ in db._migration_files()]
+    assert db.migrate(eng) == versions and versions == list(range(1, len(versions) + 1))
     assert db.migrate(eng) == []
-    assert db.schema_version(eng) == 4
+    assert db.schema_version(eng) == versions[-1]
 
 
 def test_all_spec_tables_exist(engine):
     with engine.connect() as c:
         names = {r[0] for r in c.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
     for t in ["leads", "search_runs", "templates", "campaigns", "drafts", "messages",
-              "events", "suppression", "settings", "jobs", "event_log", "run_domains", "run_log", "page_cache", "domain_state", "crawl_urls", "lead_sources", "trace_events"]:
+              "events", "suppression", "settings", "jobs", "event_log", "run_domains", "run_log", "page_cache", "domain_state", "crawl_urls", "lead_sources", "trace_events", "profile_fields", "app_state", "imap_state"]:
         assert t in names
 
 

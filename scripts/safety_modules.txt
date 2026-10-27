@@ -1,0 +1,13 @@
+# Modules held to >= 90% line coverage at the merge gate. Entries that do not exist yet are skipped until they appear.
+backend/core/outbox.py
+backend/core/tz.py
+backend/core/footer.py
+backend/core/sender.py
+backend/core/mailer.py
+backend/core/personaliser.py
+backend/core/tracker.py
+backend/core/inbox_poller.py
+backend/core/followups.py
+backend/core/extractor.py
+backend/core/heuristics.py
+backend/core/validator.py

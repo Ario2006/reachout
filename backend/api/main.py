@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routers import discovery, events, health, jobs, leads, settings, setup, suppression
+from backend.api.routers import (campaigns, compose, dashboard, discovery, events, followups, health, inbox, jobs, leads, settings,
+                                 setup, suppression)
 from backend.api.security import SecurityMiddleware
 from backend.core import config, db
 from backend.procutil import start_parent_watchdog
@@ -43,7 +44,7 @@ def create_app(token: str | None = None, allowed_origins: list[str] | None = Non
         allow_headers=["Authorization", "Content-Type", "Last-Event-ID"],
         max_age=600,
     )
-    for r in (health, setup, settings, suppression, jobs, events, discovery, leads):
+    for r in (health, setup, settings, suppression, jobs, events, discovery, leads, compose, campaigns, inbox, dashboard, followups):
         app.include_router(r.router)
     return app
 

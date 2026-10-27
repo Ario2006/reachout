@@ -9,7 +9,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from backend.core import outbox, config, db, events, jobs, pipeline
+from backend.core import config, db, events, followups, inbox_poller, jobs, outbox, pipeline, sender
 from backend.core.job_handlers import HANDLERS
 from backend.core.store import CrawlStore
 from backend.procutil import start_parent_watchdog
@@ -35,6 +35,8 @@ def build_scheduler(engine=None, runner: jobs.JobRunner | None = None) -> Blocki
                       max_instances=1, coalesce=True)
     sched.add_job(lambda: events.prune(engine=engine), "interval", hours=1, id="prune_events")
     sched.add_job(lambda: CrawlStore(engine).prune_pages(), "interval", hours=6, id="prune_page_cache")  # pages older than 90 days
+    for module in (sender, inbox_poller, followups):
+        module.register(sched, engine)
     return sched
 
 

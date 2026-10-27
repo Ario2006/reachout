@@ -8,3 +8,10 @@ desktop/out/
 desktop/test-results/
 desktop/playwright-report/
 *.log
+
+# test tooling
+.testmondata*
+.logs/
+.coverage*
+coverage.json
+htmlcov/

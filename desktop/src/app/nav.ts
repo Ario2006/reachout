@@ -10,11 +10,11 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard, milestone: 5 },
+  { id: 'dashboard', label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard, milestone: null },
   { id: 'discover', label: 'Discover', to: '/discover', icon: Compass, milestone: null },
   { id: 'leads', label: 'Leads', to: '/leads', icon: Users, milestone: null },
-  { id: 'compose', label: 'Compose', to: '/compose', icon: PenLine, milestone: 3 },
-  { id: 'campaigns', label: 'Campaigns', to: '/campaigns', icon: Send, milestone: 4 },
-  { id: 'inbox', label: 'Inbox', to: '/inbox', icon: Inbox, milestone: 5 },
+  { id: 'compose', label: 'Compose', to: '/compose', icon: PenLine, milestone: null },
+  { id: 'campaigns', label: 'Campaigns', to: '/campaigns', icon: Send, milestone: null },
+  { id: 'inbox', label: 'Inbox', to: '/inbox', icon: Inbox, milestone: null },
   { id: 'settings', label: 'Settings', to: '/settings', icon: Settings, milestone: null },
 ]

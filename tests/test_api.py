@@ -106,7 +106,9 @@ def test_no_runtime_docs(client):
         assert client.get(p).status_code == 404
 
 
-def test_no_response_ever_contains_the_app_password(client, healthy):
+def test_no_response_ever_contains_the_app_password(client, healthy, monkeypatch):
+    monkeypatch.setattr(health, "check_smtp", lambda *a, **k: ok_check("SMTP"))
+    monkeypatch.setattr(health, "check_imap", lambda *a, **k: ok_check("IMAP"))
     client.put("/settings/gmail", json={"address": "me@gmail.com", "app_password": PASSWORD})
     bodies = [
         client.get("/settings").text, client.get("/settings/gmail").text,
