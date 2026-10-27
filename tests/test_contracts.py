@@ -194,7 +194,7 @@ def test_large_attachment_gets_a_warning(client, tmp_path):
 
 # ------------------------------------------------------------------ stubs and schema
 def test_unbuilt_endpoints_answer_501_not_500(client):
-    for method, path in [("get", "/templates"), ("get", "/drafts?campaign_id=1"), ("get", "/threads"), ("get", "/metrics"),
+    for method, path in [("get", "/threads"), ("get", "/metrics"),
                          ("post", "/campaigns/1/start"), ("get", "/sending/status"), ("post", "/inbox/check-now")]:
         assert getattr(client, method)(path).status_code == 501, path
 
