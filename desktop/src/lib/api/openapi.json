@@ -122,6 +122,20 @@
             "title": "Max Pages Per Domain",
             "type": "integer"
           },
+          "max_per_domain_per_day": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Per Domain Per Day",
+            "type": "integer"
+          },
+          "min_minutes_between_same_domain": {
+            "default": 60,
+            "maximum": 1440.0,
+            "minimum": 0.0,
+            "title": "Min Minutes Between Same Domain",
+            "type": "integer"
+          },
           "num_ctx": {
             "default": 4096,
             "maximum": 8192.0,
@@ -165,6 +179,11 @@
             "minimum": 0.0,
             "title": "Target Leads",
             "type": "integer"
+          },
+          "use_recipient_timezone": {
+            "default": true,
+            "title": "Use Recipient Timezone",
+            "type": "boolean"
           },
           "window_end": {
             "default": "18:00",
@@ -1970,6 +1989,28 @@
             ],
             "title": "Max Pages Per Domain"
           },
+          "max_per_domain_per_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Per Domain Per Day"
+          },
+          "min_minutes_between_same_domain": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Minutes Between Same Domain"
+          },
           "num_ctx": {
             "anyOf": [
               {
@@ -2049,6 +2090,17 @@
               }
             ],
             "title": "Target Leads"
+          },
+          "use_recipient_timezone": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Recipient Timezone"
           },
           "window_end": {
             "anyOf": [

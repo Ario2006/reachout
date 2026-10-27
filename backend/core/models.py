@@ -57,6 +57,9 @@ class AppSettings(BaseModel):
     window_end: str = "18:00"
     send_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4, 5])  # Mon=0 .. Sun=6
     allow_guessed_emails: bool = False
+    max_per_domain_per_day: int = Field(2, ge=1, le=10)  # emails to one company domain per day, all campaigns together
+    min_minutes_between_same_domain: int = Field(60, ge=0, le=1440)  # gap between two people at the same company
+    use_recipient_timezone: bool = True  # judge the send window in the recipient's time zone when it can be inferred
 
     # Crawl / search
     max_pages_per_domain: int = Field(6, ge=1, le=20)

@@ -9,7 +9,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from backend.core import config, db, events, jobs, pipeline
+from backend.core import outbox, config, db, events, jobs, pipeline
 from backend.core.job_handlers import HANDLERS
 from backend.procutil import start_parent_watchdog
 
@@ -45,6 +45,9 @@ def main() -> None:
     if recovered:
         log.warning("marked %d stale running job(s) as failed", recovered)
     pipeline.reconcile_runs(engine)
+    unsure = outbox.recover_stale(engine)  # emails caught mid-send by a crash: never resent automatically
+    if unsure:
+        log.warning("%d email(s) were mid-send when the app stopped; they now need your confirmation", unsure)
     events.prune(engine=engine)
     runner = jobs.JobRunner(engine, HANDLERS)
     sched = build_scheduler(engine, runner)

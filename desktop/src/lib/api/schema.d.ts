@@ -567,6 +567,16 @@ export interface components {
              */
             max_pages_per_domain: number;
             /**
+             * Max Per Domain Per Day
+             * @default 2
+             */
+            max_per_domain_per_day: number;
+            /**
+             * Min Minutes Between Same Domain
+             * @default 60
+             */
+            min_minutes_between_same_domain: number;
+            /**
              * Num Ctx
              * @default 4096
              */
@@ -598,6 +608,11 @@ export interface components {
              * @default 30
              */
             target_leads: number;
+            /**
+             * Use Recipient Timezone
+             * @default true
+             */
+            use_recipient_timezone: boolean;
             /**
              * Window End
              * @default 18:00
@@ -1185,6 +1200,10 @@ export interface components {
             max_leads_per_site?: number | null;
             /** Max Pages Per Domain */
             max_pages_per_domain?: number | null;
+            /** Max Per Domain Per Day */
+            max_per_domain_per_day?: number | null;
+            /** Min Minutes Between Same Domain */
+            min_minutes_between_same_domain?: number | null;
             /** Num Ctx */
             num_ctx?: number | null;
             /** Ollama Model */
@@ -1199,6 +1218,8 @@ export interface components {
             send_days?: number[] | null;
             /** Target Leads */
             target_leads?: number | null;
+            /** Use Recipient Timezone */
+            use_recipient_timezone?: boolean | null;
             /** Window End */
             window_end?: string | null;
             /** Window Start */

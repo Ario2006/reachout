@@ -24,6 +24,9 @@ export const sendingSchema = z.object({
   window_end: time,
   send_days: z.array(z.number()).min(1, { error: 'Pick at least one day' }),
   allow_guessed_emails: z.boolean(),
+  max_per_domain_per_day: whole(1, 10),
+  min_minutes_between_same_domain: whole(0, 1440),
+  use_recipient_timezone: z.boolean(),
 }).refine((v) => v.delay_max_s >= v.delay_min_s, { path: ['delay_max_s'], error: 'Must be at least the minimum delay' })
   .refine((v) => v.window_end > v.window_start, { path: ['window_end'], error: 'Must be after the start' })
 type Values = z.infer<typeof sendingSchema>
@@ -37,6 +40,8 @@ export function SendingTab({ data }: { data: SettingsResponse }) {
       daily_cap: s.daily_cap, delay_min_s: s.delay_min_s, delay_max_s: s.delay_max_s,
       window_start: s.window_start, window_end: s.window_end, send_days: s.send_days ?? DEFAULT_DAYS,
       allow_guessed_emails: s.allow_guessed_emails,
+      max_per_domain_per_day: s.max_per_domain_per_day ?? 2, min_minutes_between_same_domain: s.min_minutes_between_same_domain ?? 60,
+      use_recipient_timezone: s.use_recipient_timezone ?? true,
     },
   })
   const { submit, warnings, saving } = useSectionSave(form)
@@ -106,6 +111,34 @@ export function SendingTab({ data }: { data: SettingsResponse }) {
               </div>
             )} />
             <FieldError errors={[e.send_days as { message?: string } | undefined]} />
+          </Field>
+        </FieldGroup>
+      </Section>
+
+      <Section title="Per company" description="Several people at one company compare notes. These limits apply across all campaigns.">
+        <FieldGroup>
+          <div className="grid grid-cols-2 gap-4">
+            <Field data-invalid={!!e.max_per_domain_per_day}>
+              <FieldLabel htmlFor="per-domain">Emails per company per day</FieldLabel>
+              <Input id="per-domain" type="number" aria-invalid={!!e.max_per_domain_per_day} {...form.register('max_per_domain_per_day', { valueAsNumber: true })} />
+              <FieldError errors={[e.max_per_domain_per_day]} />
+            </Field>
+            <Field data-invalid={!!e.min_minutes_between_same_domain}>
+              <FieldLabel htmlFor="domain-gap">Minutes between people at one company</FieldLabel>
+              <Input id="domain-gap" type="number" aria-invalid={!!e.min_minutes_between_same_domain} {...form.register('min_minutes_between_same_domain', { valueAsNumber: true })} />
+              <FieldError errors={[e.min_minutes_between_same_domain]} />
+            </Field>
+          </div>
+          <Field orientation="horizontal">
+            <Controller control={form.control} name="use_recipient_timezone" render={({ field }) => (
+              <Switch id="recipient-tz" checked={field.value} onCheckedChange={field.onChange} />
+            )} />
+            <div>
+              <FieldLabel htmlFor="recipient-tz">Use the recipient's time zone for the send window</FieldLabel>
+              <FieldDescription>
+                Inferred from a country domain such as .in or .de, or from the search region. When it cannot be told, your own clock is used.
+              </FieldDescription>
+            </div>
           </Field>
         </FieldGroup>
       </Section>

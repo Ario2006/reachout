@@ -7,6 +7,24 @@ import { SendingTab } from './sending-tab'
 import { SuppressionTab } from './suppression-tab'
 
 describe('SendingTab', () => {
+  it('limits emails per company: shows the safe defaults, rejects out-of-range values, and saves the change', async () => {
+    const { calls } = mockApi({ 'PUT /settings': { json: settingsFixture({ max_per_domain_per_day: 3 }) }, 'GET /setup/status': { json: {} } })
+    renderWithProviders(<SendingTab data={settingsFixture()} />)
+    const per = screen.getByLabelText('Emails per company per day')
+    expect(per).toHaveValue(2)
+    expect(screen.getByLabelText('Minutes between people at one company')).toHaveValue(60)
+    expect(screen.getByRole('switch', { name: /recipient's time zone/ })).toBeChecked()
+    await userEvent.clear(per)
+    await userEvent.type(per, '50')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('At most 10')).toBeInTheDocument()
+    expect(calls).toHaveLength(0)
+    await userEvent.clear(per)
+    await userEvent.type(per, '3')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ max_per_domain_per_day: 3, min_minutes_between_same_domain: 60, use_recipient_timezone: true }))
+  })
+
   it('blocks values above the hard ceiling with an inline error and no request', async () => {
     const { calls } = mockApi({})
     renderWithProviders(<SendingTab data={settingsFixture()} />)
