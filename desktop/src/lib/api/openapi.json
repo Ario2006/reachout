@@ -340,6 +340,11 @@
             "title": "Approved",
             "type": "integer"
           },
+          "skipped_blocked": {
+            "default": 0,
+            "title": "Skipped Blocked",
+            "type": "integer"
+          },
           "skipped_flagged": {
             "title": "Skipped Flagged",
             "type": "integer"
@@ -5694,6 +5699,31 @@
           },
           {
             "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "pending",
+                      "needs_review",
+                      "approved",
+                      "rejected"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
             "name": "flagged",
             "required": false,
             "schema": {
@@ -5737,34 +5767,29 @@
               "title": "Limit",
               "type": "integer"
             }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "enum": [
-                        "pending",
-                        "needs_review",
-                        "approved",
-                        "rejected"
-                      ],
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Status"
-              }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "initial",
+                    "followup_1",
+                    "followup_2"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
             }
           }
-        },
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5795,6 +5820,7 @@
     },
     "/drafts/bulk-approve": {
       "post": {
+        "description": "Pending drafts only; `needs_review` drafts need an explicit single approve.",
         "operationId": "bulk_approve_drafts_bulk_approve_post",
         "requestBody": {
           "content": {

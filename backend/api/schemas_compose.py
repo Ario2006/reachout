@@ -1,9 +1,10 @@
 """API contract for Compose (milestone 3): templates, profile fields, drafts. Owner: task B."""
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.api.schemas import JobOut
 from backend.core.models import EmailConfidence, Mode
@@ -118,6 +119,30 @@ class DraftPatch(BaseModel):
     body: str | None = Field(None, min_length=1, max_length=6000)
     status: Literal["pending", "approved", "rejected"] | None = None  # needs_review is only ever set by the generator
 
+    @field_validator("subject")
+    @classmethod
+    def _subject(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("The subject cannot be blank.")
+        if re.search(r"[\x00-\x1f\x7f]", v):
+            raise ValueError("The subject must be a single line without control characters.")
+        return v
+
+    @field_validator("body")
+    @classmethod
+    def _body(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("The body cannot be blank.")
+        if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", v):
+            raise ValueError("The body contains control characters.")
+        return v
+
 
 class GenerateDraftsIn(BaseModel):
     campaign_id: int
@@ -134,6 +159,7 @@ class BulkApproveIn(BaseModel):
 class BulkApproveOut(BaseModel):
     approved: int
     skipped_flagged: int
+    skipped_blocked: int = 0  # suppressed or replied/bounced/opted-out leads are never approved
 
 
 GenerateDraftsOut = JobOut
