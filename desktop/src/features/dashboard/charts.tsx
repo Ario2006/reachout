@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from 'recharts'
 import type { Metrics } from '@/lib/api/types'
 
 type Funnel = Metrics['funnel']
@@ -8,79 +8,68 @@ const STAGE_LABEL: Record<Funnel[number]['stage'], string> = {
   leads: 'Leads', drafted: 'Drafted', approved: 'Approved', sent: 'Sent', delivered: 'Delivered', replied: 'Replied',
 }
 
-/** One hue, one bar per stage, count as text: the length carries the magnitude, so no legend is needed. */
+const BAR = 'var(--color-primary)'
+const TICK = { fill: 'var(--color-muted-foreground)', fontSize: 11 }
+// jsdom has no layout, so the container needs a size to render anything; real windows resize it immediately.
+const INITIAL = { width: 520, height: 200 }
+
+/** One hue, one bar per stage, count as a label: the length carries the magnitude, so no legend is needed. The visual
+ *  chart is hidden from assistive tech; an equivalent list is exposed instead. */
 export function FunnelChart({ funnel }: { funnel: Funnel }) {
-  const max = Math.max(1, ...funnel.map((f) => f.count))
+  const data = funnel.map((f) => ({ label: STAGE_LABEL[f.stage], count: f.count }))
   return (
     <figure aria-label="Funnel from leads to replies">
-      <ul className="space-y-2" data-testid="funnel">
-        {funnel.map((f, i) => (
-          <li key={f.stage} className="grid grid-cols-[5.5rem_1fr_3rem] items-center gap-3 text-sm">
-            <span className="text-muted-foreground">{STAGE_LABEL[f.stage]}</span>
-            <div className="bg-muted h-4 overflow-hidden rounded-r-sm" aria-hidden>
-              <div className="bg-primary h-full rounded-r-[4px]" style={{ width: `${(f.count / max) * 100}%`, opacity: 1 - i * 0.06 }} />
-            </div>
-            <span className="text-right font-medium tabular-nums">{f.count.toLocaleString()}</span>
-          </li>
-        ))}
+      <div aria-hidden>
+        <ResponsiveContainer width="100%" height={data.length * 34 + 8} initialDimension={{ ...INITIAL, height: data.length * 34 + 8 }}>
+          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 40, bottom: 0, left: 0 }} barCategoryGap={8}>
+            <XAxis type="number" hide domain={[0, (max: number) => Math.max(1, max)]} />
+            <YAxis type="category" dataKey="label" width={80} tickLine={false} axisLine={false} tick={TICK} />
+            <Bar dataKey="count" fill={BAR} radius={[0, 4, 4, 0]} isAnimationActive={false}>
+              <LabelList dataKey="count" position="right" className="fill-foreground text-xs font-medium" formatter={(v: unknown) => Number(v).toLocaleString()} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className="sr-only" data-testid="funnel">
+        {data.map((d) => <li key={d.label}>{d.label} {d.count.toLocaleString()}</li>)}
       </ul>
     </figure>
   )
 }
 
-const W = 560
-const H = 160
-const PAD = { l: 28, r: 4, t: 8, b: 20 }
-
-function niceMax(n: number): number {
-  if (n <= 5) return 5
-  const p = 10 ** Math.floor(Math.log10(n))
-  return Math.ceil(n / p) * p
-}
-
 function shortDay(day: string): string {
-  const d = new Date(`${day}T12:00:00`)
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-/** Emails sent per local day. Single series: the title names it, so there is no legend. A table view is exposed to
- *  screen readers, and every bar has a hover readout. */
+function DayTooltip({ active, payload }: TooltipContentProps) {
+  const d = active ? (payload?.[0]?.payload as PerDay[number] | undefined) : undefined
+  if (!d) return null
+  return (
+    <div className="bg-popover text-popover-foreground rounded-md border px-2.5 py-1.5 text-xs shadow-sm">
+      <div className="font-medium">{shortDay(d.day)}</div>
+      <div>{d.sent} sent, {d.replies} replies, {d.bounces} bounces</div>
+    </div>
+  )
+}
+
+/** Emails sent per local day. Single series: the card title names it, so there is no legend. A table is exposed to
+ *  screen readers; the hover tooltip is visual only. */
 export function SendsChart({ days }: { days: PerDay }) {
-  const [hover, setHover] = useState<number | null>(null)
-  const max = niceMax(Math.max(0, ...days.map((d) => d.sent)))
-  const slot = (W - PAD.l - PAD.r) / Math.max(1, days.length)
-  const bw = Math.min(24, Math.max(3, slot - 2))
-  const y = (v: number) => PAD.t + (H - PAD.t - PAD.b) * (1 - v / max)
-  const hovered = hover === null ? null : days[hover]
   const total = days.reduce((s, d) => s + d.sent, 0)
   return (
     <figure aria-label="Emails sent per day">
-      <div className="text-muted-foreground mb-1 h-5 text-xs" data-testid="sends-readout">
-        {hovered ? `${shortDay(hovered.day)}: ${hovered.sent} sent, ${hovered.replies} replies, ${hovered.bounces} bounces` : `${total.toLocaleString()} emails in this period`}
+      <div className="text-muted-foreground mb-1 h-5 text-xs" data-testid="sends-readout">{total.toLocaleString()} emails in this period</div>
+      <div aria-hidden>
+        <ResponsiveContainer width="100%" height={180} initialDimension={INITIAL}>
+          <BarChart data={days} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+            <CartesianGrid vertical={false} stroke="var(--color-border)" />
+            <XAxis dataKey="day" tickFormatter={shortDay} tick={TICK} tickLine={false} axisLine={false} minTickGap={24} />
+            <YAxis allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} />
+            <Tooltip content={DayTooltip} cursor={{ fill: 'var(--color-muted)', opacity: 0.5 }} isAnimationActive={false} />
+            <Bar dataKey="sent" fill={BAR} radius={[3, 3, 0, 0]} maxBarSize={24} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Emails sent per day, ${total} in total`}>
-        {[0, max / 2, max].map((t) => (
-          <g key={t}>
-            <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} className="stroke-border" strokeWidth={1} />
-            <text x={PAD.l - 6} y={y(t) + 3} textAnchor="end" className="fill-muted-foreground text-[10px]">{Math.round(t)}</text>
-          </g>
-        ))}
-        {days.map((d, i) => {
-          const x = PAD.l + i * slot + (slot - bw) / 2
-          const h = Math.max(d.sent > 0 ? 2 : 0, y(0) - y(d.sent))
-          return (
-            <g key={d.day} data-testid={`bar-${i}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
-              <rect x={PAD.l + i * slot} y={PAD.t} width={slot} height={H - PAD.t - PAD.b} fill="transparent" />
-              <rect x={x} y={y(0) - h} width={bw} height={h} rx={3} className={hover === i ? 'fill-primary' : 'fill-primary/80'} />
-            </g>
-          )
-        })}
-        {[0, Math.floor((days.length - 1) / 2), days.length - 1].filter((i, k, a) => days.length > 0 && a.indexOf(i) === k).map((i) => (
-          <text key={i} x={PAD.l + i * slot + slot / 2} y={H - 4} textAnchor={i === 0 ? 'start' : i === days.length - 1 ? 'end' : 'middle'} className="fill-muted-foreground text-[10px]">
-            {shortDay(days[i]!.day)}
-          </text>
-        ))}
-      </svg>
       <table className="sr-only">
         <caption>Emails sent per day</caption>
         <thead><tr><th scope="col">Day</th><th scope="col">Sent</th><th scope="col">Replies</th><th scope="col">Bounces</th></tr></thead>

@@ -33,8 +33,8 @@ describe('DashboardPage', () => {
     expect(screen.getByTestId('kpi-bounce-rate')).toHaveTextContent('3.3%')
     const funnel = within(screen.getByTestId('funnel'))
     expect(funnel.getAllByRole('listitem')).toHaveLength(6)
-    expect(funnel.getByText('Replied').closest('li')).toHaveTextContent('9')
-    expect(screen.getByRole('img', { name: /Emails sent per day, 30 in total/ })).toBeInTheDocument()
+    expect(funnel.getByText(/Replied/)).toHaveTextContent('9')
+    expect(screen.getByRole('figure', { name: 'Emails sent per day' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Bounce rate is 8.0%/ })).toHaveAttribute('href', '/campaigns')
     expect(screen.getByRole('link', { name: /3 unread/ })).toHaveAttribute('href', '/inbox?filter=unread')
     expect(await screen.findByText('Priya Sharma replied')).toBeInTheDocument()
@@ -76,13 +76,13 @@ describe('DashboardPage', () => {
     expect(calls.some((c) => c.path.startsWith('/metrics') && c.path.includes('range=7d'))).toBe(true)
   })
 
-  it('shows a readout when hovering a bar', async () => {
+  it('gives the sends chart a total and a per-day table for assistive tech', async () => {
     mockApi({ 'GET /metrics': { json: metrics() }, 'GET /activity': { json: feed } })
     renderWithProviders(<DashboardPage />, '/')
     await screen.findByTestId('kpi-leads')
-    await userEvent.hover(screen.getByTestId('bar-1'))
-    expect(screen.getByTestId('sends-readout')).toHaveTextContent('20 sent, 3 replies, 1 bounces')
-    await userEvent.unhover(screen.getByTestId('bar-1'))
     expect(screen.getByTestId('sends-readout')).toHaveTextContent('30 emails in this period')
+    const rows = within(screen.getByRole('table', { name: 'Emails sent per day' })).getAllByRole('row')
+    expect(rows[2]).toHaveTextContent(/20\s*3\s*1/)
   })
+
 })
