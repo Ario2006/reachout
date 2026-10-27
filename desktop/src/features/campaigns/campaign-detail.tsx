@@ -12,6 +12,7 @@ import { ConfirmDialog } from './confirm-dialog'
 import { PauseBanner, RunProgress, StateBadge } from './campaign-status'
 import { DryRunDialog } from './dry-run-dialog'
 import { dryRunBlocker, startBlocker, testSendBlocker } from './helpers'
+import { FollowupsSection } from './followups-section'
 import { NeedsAttention } from './needs-confirmation'
 import { ReadinessList } from './readiness-card'
 import { SettingsForm } from './settings-form'
@@ -115,10 +116,7 @@ export function CampaignDetail({ id }: { id: number }) {
         <CardContent><SettingsForm campaign={c} /></CardContent>
       </Card>
 
-      {/* FOLLOW-UPS SLOT: owned by the follow-ups UI task (desktop/src/features/campaigns/followups-*.tsx). It mounts here with one line. */}
-      <section data-slot="followups" aria-label="Follow-ups" className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-        Follow-up schedule: coming in a later update.
-      </section>
+      <FollowupsSection campaign={c} />
 
       <ConfirmDialog
         open={askStart}

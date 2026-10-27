@@ -1,5 +1,6 @@
 import { CheckCheck, Loader2, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -7,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiError } from '@/lib/api/client'
-import { useBulkApprove, useDrafts, usePatchDraft, type DraftItem } from '@/lib/api/hooks-compose'
+import { useBulkApprove, useDrafts, usePatchDraft, type DraftItem, type DraftKindFilter } from '@/lib/api/hooks-compose'
 import type { Campaign, DraftStatus } from '@/lib/api/types'
 import { pluralize } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -23,17 +24,21 @@ const TABS: { id: Tab; label: string; status: DraftStatus[] }[] = [
   { id: 'rejected', label: 'Rejected', status: ['rejected'] },
   { id: 'all', label: 'All', status: [] },
 ]
+const KINDS: { id: DraftKindFilter; label: string }[] = [{ id: 'initial', label: 'Initial' }, { id: 'followups', label: 'Follow-ups' }]
+const KIND_NAME = { initial: 'Initial', followup_1: 'Follow-up 1', followup_2: 'Follow-up 2' } as const
 const OPEN: ReadonlySet<DraftStatus> = new Set(['pending', 'needs_review'])
 
 export function DraftsPanel({ campaign }: { campaign: Campaign }) {
+  const [params] = useSearchParams()
   const [tab, setTab] = useState<Tab>('review')
+  const [kind, setKind] = useState<DraftKindFilter>(() => (params.get('kind') === 'followups' ? 'followups' : 'initial'))
   const [q, setQ] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [overrides, setOverrides] = useState<Record<number, DraftStatus>>({})
   const [confirmBulk, setConfirmBulk] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const status = TABS.find((t) => t.id === tab)?.status ?? []
-  const drafts = useDrafts({ campaignId: campaign.id, status, q })
+  const drafts = useDrafts({ campaignId: campaign.id, status, q, kind })
   const patch = usePatchDraft()
   const bulk = useBulkApprove()
   const items = useMemo(() => drafts.data?.items ?? [], [drafts.data])
@@ -115,6 +120,11 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
       <GenerateControls campaignId={campaign.id} disabled={noTemplate} />
 
       <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Draft filters">
+        <div role="group" aria-label="Draft type" className="flex gap-1">
+          {KINDS.map((k) => (
+            <Button key={k.id} size="sm" variant={kind === k.id ? 'secondary' : 'ghost'} aria-pressed={kind === k.id} onClick={() => { setKind(k.id); setSelectedId(null) }}>{k.label}</Button>
+          ))}
+        </div>
         <div role="group" aria-label="Show drafts" className="flex gap-1">
           {TABS.map((t) => (
             <Button key={t.id} size="sm" variant={tab === t.id ? 'secondary' : 'ghost'} aria-pressed={tab === t.id} onClick={() => setTab(t.id)}>
@@ -140,7 +150,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
           <Button size="xs" variant="outline" onClick={() => void drafts.refetch()}>Retry</Button>
         </AlertDescription></Alert>
       ) : items.length === 0 ? (
-        <EmptyState tab={tab} hasAny={(counts ? counts.pending + counts.needs_review + counts.approved + counts.rejected : 0) > 0} q={q} />
+        <EmptyState tab={tab} kind={kind} hasAny={(counts ? counts.pending + counts.needs_review + counts.approved + counts.rejected : 0) > 0} q={q} />
       ) : (
         <div className="grid min-h-[420px] flex-1 grid-cols-[minmax(240px,320px)_1fr] overflow-hidden rounded-lg border">
           <ul ref={listRef} className="divide-y overflow-y-auto" aria-label="Drafts" data-testid="draft-list">
@@ -160,7 +170,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
                       <span className="truncate text-sm font-medium">{d.lead.name ?? d.lead.email}</span>
                       <DraftStatusBadge status={st} />
                     </div>
-                    <p className="text-muted-foreground truncate text-xs">{d.lead.company ?? d.lead.email}{d.subject ? ` · ${d.subject}` : ''}</p>
+                    <p className="text-muted-foreground truncate text-xs">{d.kind !== 'initial' ? `${KIND_NAME[d.kind]} · ` : ''}{d.lead.company ?? d.lead.email}{d.subject ? ` · ${d.subject}` : ''}</p>
                     {d.flags.length > 0 ? <div className="flex flex-wrap items-center gap-1"><FlagBadges flags={d.flags} max={2} /></div> : null}
                   </button>
                 </li>
@@ -200,8 +210,9 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
   )
 }
 
-function EmptyState({ tab, hasAny, q }: { tab: Tab; hasAny: boolean; q: string }) {
+function EmptyState({ tab, kind, hasAny, q }: { tab: Tab; kind: DraftKindFilter; hasAny: boolean; q: string }) {
   const text = q ? 'No drafts match your search.'
+    : kind === 'followups' && !hasAny ? 'No follow-up drafts yet. They are written when a follow-up comes due and this campaign requires your approval.'
     : !hasAny ? 'No drafts yet. Choose Generate drafts to write one for every lead that fits this campaign.'
       : tab === 'review' ? 'All caught up. Every draft has been approved or rejected.'
         : 'Nothing here yet.'

@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api/client'
 import { useUpdateCampaign } from '@/lib/api/hooks-campaigns'
 import type { Campaign, CampaignIn } from '@/lib/api/types'
+import { FollowupFields, validateFollowups, type FollowupDraft } from './followups-fields'
+import { TemplatePicker } from './followups-template-picker'
 import { capWarning } from './helpers'
 
 interface Draft {
@@ -18,7 +20,11 @@ interface Draft {
   delayMin: string
   delayMax: string
   attachment: string
+  templateId: string
+  followups: FollowupDraft
 }
+
+const daysOf = (c: Campaign): number[] => c.followup_days ?? [4, 9]
 
 function fromCampaign(c: Campaign): Draft {
   return {
@@ -26,6 +32,10 @@ function fromCampaign(c: Campaign): Draft {
     delayMin: c.delay_min_s === null || c.delay_min_s === undefined ? '' : String(c.delay_min_s),
     delayMax: c.delay_max_s === null || c.delay_max_s === undefined ? '' : String(c.delay_max_s),
     attachment: c.attachment_path ?? '',
+    templateId: c.template_id === null || c.template_id === undefined ? '' : String(c.template_id),
+    followups: {
+      enabled: c.followups_enabled, day1: String(daysOf(c)[0] ?? 4), day2: String(daysOf(c)[1] ?? 9), requireApproval: c.followups_require_approval,
+    },
   }
 }
 
@@ -38,11 +48,13 @@ export function toRequest(c: Campaign, d: Draft): { body: CampaignIn } | { error
   const hi = d.delayMax.trim() === '' ? null : Number(d.delayMax)
   if ((lo !== null && (!Number.isInteger(lo) || lo < 0)) || (hi !== null && (!Number.isInteger(hi) || hi < 0))) return { error: 'Delays are whole seconds.' }
   if (lo !== null && hi !== null && hi < lo) return { error: 'The longest delay must not be shorter than the shortest.' }
+  const fu = validateFollowups(d.followups, daysOf(c))
+  if ('error' in fu) return { error: fu.error }
   return {
     body: {
-      name: d.name.trim(), template_id: c.template_id ?? null, mode: c.mode ?? null, attachment_path: d.attachment.trim() || null,
+      name: d.name.trim(), template_id: d.templateId === '' ? null : Number(d.templateId), mode: c.mode ?? null, attachment_path: d.attachment.trim() || null,
       daily_cap: cap, window_start: d.windowStart, window_end: d.windowEnd, delay_min_s: lo, delay_max_s: hi,
-      followups_enabled: c.followups_enabled, followup_days: c.followup_days, followups_require_approval: c.followups_require_approval,
+      followups_enabled: d.followups.enabled, followup_days: fu.days, followups_require_approval: d.followups.requireApproval,
     },
   }
 }
@@ -56,6 +68,7 @@ export function SettingsForm({ campaign }: { campaign: Campaign }) {
   const dirty = JSON.stringify(d) !== JSON.stringify(fromCampaign(campaign))
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }))
   const warn = capWarning(Number(d.dailyCap))
+  const followupError = (() => { const r = validateFollowups(d.followups, daysOf(campaign)); return 'error' in r ? r.error : null })()
   const bridge = typeof window !== 'undefined' ? window.reachout : undefined
 
   const submit = (e: React.FormEvent) => {
@@ -115,6 +128,8 @@ export function SettingsForm({ campaign }: { campaign: Campaign }) {
           <Label htmlFor="c-dmax">Longest delay (seconds)</Label>
           <Input id="c-dmax" inputMode="numeric" placeholder="Use Settings" value={d.delayMax} onChange={(e) => set('delayMax', e.target.value)} />
         </div>
+        <TemplatePicker value={d.templateId} onChange={(v) => set('templateId', v)} mode={campaign.mode} followupsEnabled={d.followups.enabled} />
+        <FollowupFields value={d.followups} onChange={(v) => set('followups', v)} error={followupError} />
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="c-att">Attachment (one PDF, optional)</Label>
           <div className="flex gap-2">
@@ -134,7 +149,7 @@ export function SettingsForm({ campaign }: { campaign: Campaign }) {
       {formError ? <p role="alert" className="text-destructive text-sm">{formError}</p> : null}
       {locked ? null : (
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={!dirty || save.isPending}>{save.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null} Save settings</Button>
+          <Button type="submit" disabled={!dirty || save.isPending || followupError !== null}>{save.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null} Save settings</Button>
           {dirty ? <span className="text-muted-foreground text-xs">Unsaved changes</span> : null}
         </div>
       )}
