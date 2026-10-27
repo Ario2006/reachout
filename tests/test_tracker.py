@@ -11,6 +11,13 @@ from backend.core.tracker import (GmailImap, ImapTransientError, detect_opt_out,
 from tests.test_inbox_world import ME, configure, eml, sent_to
 
 
+@pytest.fixture(autouse=True)
+def _reset_fetch_failures():
+    tracker._FETCH_FAILURES.clear()
+    yield
+    tracker._FETCH_FAILURES.clear()
+
+
 def kind_of(name: str) -> str:
     return parse_email(eml(name), ME).kind
 
@@ -270,6 +277,29 @@ def test_gmail_imap_filters_the_star_quirk_and_first_run_uses_since():
 def test_gmail_imap_stops_at_first_failed_fetch():
     conn = FakeConn({1: b"a", 2: b"b", 3: b"c"}, fetch_fail_uid=2)
     assert [m.uid for m in client(conn).fetch_new("INBOX", 0).messages] == [1]
+
+
+def test_a_message_that_never_downloads_is_skipped_after_three_polls_and_always_reported():
+    mail = {1: b"a", 2: b"b", 3: b"c"}
+    for attempt in (1, 2):  # each poll is a new client object, as in production
+        g = client(FakeConn(mail, fetch_fail_uid=2))
+        res = g.fetch_new("INBOX", 0)
+        assert [m.uid for m in res.messages] == [1]  # stops before uid 2: the cursor can not pass it
+        assert f"attempt {attempt} of 3" in g.last_problem and "email 2" in g.last_problem
+    g = client(FakeConn(mail, fetch_fail_uid=2))
+    res = g.fetch_new("INBOX", 0)
+    assert [m.uid for m in res.messages] == [1, 3]  # third failed poll: skipped, the mailbox moves on
+    assert "Skipped email 2" in g.last_problem and tracker._FETCH_FAILURES == {}
+    g2 = client(FakeConn(mail))
+    assert [m.uid for m in g2.fetch_new("INBOX", 0).messages] == [1, 2, 3] and g2.last_problem is None
+
+
+def test_a_download_that_recovers_resets_the_failure_count():
+    mail = {1: b"a", 2: b"b"}
+    client(FakeConn(mail, fetch_fail_uid=2)).fetch_new("INBOX", 0)
+    assert tracker._FETCH_FAILURES
+    assert [m.uid for m in client(FakeConn(mail)).fetch_new("INBOX", 0).messages] == [1, 2]
+    assert tracker._FETCH_FAILURES == {}
 
 
 def test_gmail_imap_login_failure_does_not_leak_the_password():

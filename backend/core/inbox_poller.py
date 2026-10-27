@@ -10,6 +10,9 @@ Safety properties (each has a test in tests/test_inbox.py):
   which has a unique index. Re-delivery, a UIDVALIDITY reset or a crash mid-batch re-processes without creating
   anything twice; the suppression insert happens before the event insert, so a crash can not leave a recorded
   opt-out without its suppression entry.
+* an email that can not be recorded (after one retry) stops the batch and leaves the cursor before it, so it is retried
+  at the next poll and no reply is lost; an email that can not be downloaded is retried for 3 polls, then skipped, and
+  either way `last_error` says so.
 * a weaker outcome never overwrites a stronger lead status (`tracker.LEAD_PRIORITY`).
 * a login failure is stored in `imap_state.last_error`, ends the job normally and is not retried in a loop;
   scheduled polls back off for an hour after one. The Dashboard shows it as the `gmail_login` attention item.
@@ -131,6 +134,18 @@ def process_email(engine: Engine, raw: bytes, own_address: str, now: float) -> s
 
 
 # ------------------------------------------------------------------------------------------------ the job
+class BatchStopped(Exception):
+    """An email could not be recorded even after a retry; the batch stops there and the cursor stays before it."""
+
+
+def _process_with_retry(engine: Engine, raw: bytes, own: str, now: float) -> str | None:
+    try:
+        return process_email(engine, raw, own, now)
+    except Exception:  # noqa: BLE001 - e.g. "database is locked": one more try, process_email is idempotent
+        time.sleep(0.2)
+        return process_email(engine, raw, own, now)
+
+
 def _check_folder(ctx: JobContext, imap, folder: str, own: str, now: float, totals: dict) -> None:
     engine = ctx.engine
     validity, after = _get_state(engine, folder)
@@ -145,20 +160,31 @@ def _check_folder(ctx: JobContext, imap, folder: str, own: str, now: float, tota
         if validity is None:
             validity = res.uidvalidity
         if not res.messages:
+            problem = getattr(imap, "last_problem", None)
+            if problem:
+                totals["problems"].append(problem)
             break
         for m in res.messages:
             totals["checked"] += 1
             try:
-                kind = process_email(engine, m.raw, own, now)
-            except Exception:  # noqa: BLE001 - one bad email must not stall the folder
+                kind = _process_with_retry(engine, m.raw, own, now)
+            except Exception as e:  # noqa: BLE001
+                # Never move the cursor past a message we could not record: a lost reply could mean a follow-up
+                # goes to someone who answered. Keep everything before it, stop here, retry on the next poll.
                 log.exception("could not process uid %s in %s", m.uid, folder)
                 totals["errors"] += 1
-                kind = None
+                _save_state(engine, folder, uidvalidity=validity, last_uid=after)
+                raise BatchStopped(f"Could not record email {m.uid} in {folder} ({type(e).__name__}); "
+                                   "it will be retried at the next check.") from e
             if kind:
                 totals[KIND_KEY[kind]] += 1
             after = max(after, m.uid)
         _save_state(engine, folder, uidvalidity=validity, last_uid=after)
         ctx.progress(totals["checked"], None, f"Checked {totals['checked']} email(s)")
+        problem = getattr(imap, "last_problem", None)
+        if problem:  # a message could not be downloaded: report it, and do not refetch it in this same poll
+            totals["problems"].append(problem)
+            break
         ctx.raise_if_cancelled()
     _save_state(engine, folder, uidvalidity=validity, last_uid=after)
 
@@ -169,7 +195,7 @@ def run_inbox_check(ctx: JobContext, payload: dict) -> dict:
     svc = services.get_services()
     now = svc.clock.now()
     own = db.load_settings(engine).gmail_address
-    totals: dict = {"new_replies": 0, "bounces": 0, "auto_replies": 0, "opt_outs": 0, "checked": 0, "errors": 0}
+    totals: dict = {"new_replies": 0, "bounces": 0, "auto_replies": 0, "opt_outs": 0, "checked": 0, "errors": 0, "problems": []}
     ctx.progress(0, None, "Checking Gmail", force=True)
     error: str | None = None
     imap = None
@@ -191,6 +217,9 @@ def run_inbox_check(ctx: JobContext, payload: dict) -> dict:
                 imap.close()
             except Exception:  # noqa: BLE001
                 pass
+    problems = totals.pop("problems")
+    if error is None and problems:
+        error = "; ".join(dict.fromkeys(problems))  # a skipped or unreadable email is never silent
     for folder in FOLDERS:
         _save_state(engine, folder, last_checked_at=now, last_error=error)
     if error:

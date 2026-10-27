@@ -13,6 +13,8 @@ Two halves:
 Classification order (first hit wins): from ourselves -> ignore; delivery report (DSN) -> bounce; auto-reply
 headers or subject -> auto_reply; first lines say stop/unsubscribe/remove me -> opt_out; otherwise reply.
 An auto-reply is never a reply and never an opt-out, even if it contains the word "unsubscribe".
+The opt-out detector deliberately errs towards suppressing; a false opt-out can only be undone by removing the
+address from the Settings suppression list (and only entries added by hand are removable there).
 """
 from __future__ import annotations
 
@@ -59,8 +61,19 @@ def _quote(folder: str) -> str:
     return '"' + folder.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+# (folder, uidvalidity, uid) -> consecutive polls on which downloading that message failed. Lives in the worker
+# process (the client object itself is recreated for every poll).
+_FETCH_FAILURES: dict[tuple[str, int, int], int] = {}
+MAX_FETCH_FAILURES = 3
+
+
 class GmailImap:
-    """Read-only IMAP over SSL to imap.gmail.com:993."""
+    """Read-only IMAP over SSL to imap.gmail.com:993.
+
+    After each `fetch_new`, `last_problem` is None or a sentence about a message that could not be downloaded. Such a
+    message stops the batch (so the cursor does not pass it) for 2 polls and is skipped on the 3rd."""
+
+    last_problem: str | None = None
 
     PARTIAL_BYTES = 262_144  # a reply or a DSN is far smaller; huge attachments are never downloaded
     MAX_BATCH = 500
@@ -132,10 +145,20 @@ class GmailImap:
             # "n:*" always returns the newest message even when it is not newer than n: filter again.
             uids = sorted(u for u in (int(x) for x in (data[0] or b"").split()) if u > after_uid)[: self.MAX_BATCH]
             messages: list[IncomingMessage] = []
+            self.last_problem = None
             for uid in uids:
+                key = (folder, uidvalidity, uid)
                 raw = self._fetch_one(conn, uid)
                 if raw is None:
-                    break  # stop at the first failure so the next poll retries from here and nothing is skipped
+                    n = _FETCH_FAILURES.get(key, 0) + 1
+                    if n >= MAX_FETCH_FAILURES:  # a message that never downloads must not block the mailbox forever
+                        _FETCH_FAILURES.pop(key, None)
+                        self.last_problem = f"Skipped email {uid} in {folder}: it could not be downloaded {n} times in a row."
+                        continue
+                    _FETCH_FAILURES[key] = n
+                    self.last_problem = f"Could not download email {uid} in {folder} (attempt {n} of {MAX_FETCH_FAILURES}); will retry."
+                    break  # stop here so the next poll retries from this message and nothing is passed over
+                _FETCH_FAILURES.pop(key, None)
                 messages.append(IncomingMessage(uid, raw))
             return FetchResult(uidvalidity, messages)
         except (imaplib.IMAP4.error, OSError) as e:

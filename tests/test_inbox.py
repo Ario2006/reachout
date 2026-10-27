@@ -180,7 +180,7 @@ def test_status_priority(world, start, incoming, expected):
     assert len(events_of(world, lead)) == 1  # the event itself is always recorded
 
 
-def test_opt_out_after_bounce_keeps_bounced_but_still_suppresses(world):
+def test_opt_out_after_bounce_outranks_bounced_and_suppresses(world):
     lead, _ = sent_to(world, "stopper", "sam")
     with world.begin() as c:
         c.execute(text("UPDATE leads SET status = 'bounced' WHERE id = :i"), {"i": lead})
@@ -214,16 +214,69 @@ def test_mail_without_message_id_is_deduplicated_by_content_hash(world):
     assert events_of(world, lead)[0]["imap_message_id"].startswith("sha256:")
 
 
-def test_one_bad_email_does_not_stall_the_folder(world, monkeypatch):
-    sent_to(world, "acme", "priya")
-    fake = use_fakes().fake_imap
-    fake.deliver(eml("reply_threaded"))
-    fake.deliver(eml("newsletter_unrelated"))
-    real = inbox_poller.process_email
-    monkeypatch.setattr(inbox_poller, "process_email", lambda e, raw, *a: (_ for _ in ()).throw(RuntimeError("boom")) if b"Weekly" in raw else real(e, raw, *a))
+@pytest.fixture
+def no_sleep(monkeypatch):
+    monkeypatch.setattr(inbox_poller.time, "sleep", lambda s: None)
+
+
+def _fail_on(monkeypatch, marker: bytes, times: int):
+    """process_email raises for the email containing `marker`, `times` times in total."""
+    real, left = inbox_poller.process_email, [times]
+
+    def flaky(engine, raw, own, now):
+        if marker in raw and left[0] > 0:
+            left[0] -= 1
+            raise RuntimeError("database is locked")
+        return real(engine, raw, own, now)
+
+    monkeypatch.setattr(inbox_poller, "process_email", flaky)
+
+
+def test_a_record_failure_is_retried_once(world, monkeypatch, no_sleep):
+    lead, _ = sent_to(world, "acme", "priya")
+    use_fakes().fake_imap.deliver(eml("reply_threaded"))
+    _fail_on(monkeypatch, b"Priya", 1)
     res = run_check(world)
-    assert res["errors"] == 1 and res["new_replies"] == 1
-    assert count(world, "SELECT last_uid FROM imap_state") == 2
+    assert res["new_replies"] == 1 and "error" not in res and len(events_of(world, lead)) == 1
+
+
+def test_persistent_record_failure_stops_the_batch_before_that_uid(world, monkeypatch, no_sleep):
+    a, _ = sent_to(world, "beta", "ravi")
+    b, _ = sent_to(world, "acme", "priya")
+    fake = use_fakes().fake_imap
+    fake.deliver(eml("reply_no_headers"))  # uid 1: fine
+    fake.deliver(eml("reply_threaded"))    # uid 2: keeps failing
+    fake.deliver(eml("newsletter_unrelated"))  # uid 3: must not be passed over either
+    _fail_on(monkeypatch, b"Priya", 10)
+    res = run_check(world)
+    assert res["new_replies"] == 1 and "Could not record email 2" in res["error"]
+    assert count(world, "SELECT last_uid FROM imap_state WHERE folder = 'INBOX'") == 1  # cursor stays before uid 2
+    assert inbox_poller.status(world)["last_error"] == res["error"]
+    assert len(events_of(world, a)) == 1 and events_of(world, b) == [] and lead_status(world, b) == "sent"
+    monkeypatch.undo()  # the database is healthy again: the next poll picks up uid 2 and 3
+    res = run_check(world)
+    assert res["new_replies"] == 1 and "error" not in res and len(events_of(world, b)) == 1
+    assert count(world, "SELECT last_uid FROM imap_state WHERE folder = 'INBOX'") == 3
+    assert inbox_poller.status(world)["last_error"] is None
+
+
+def test_download_problem_is_reported_as_last_error(world):
+    class Stuck:
+        last_problem = "Could not download email 2 in INBOX (attempt 1 of 3); will retry."
+
+        def fetch_new(self, folder, after):
+            from backend.core.ports import FetchResult
+            return FetchResult(1, [])
+
+        def close(self):
+            pass
+
+    f = services.fakes()
+    f.imap = lambda: Stuck()
+    services.use(f)
+    res = run_check(world)
+    assert "Could not download email 2" in res["error"]
+    assert inbox_poller.status(world)["last_error"] == res["error"]
 
 
 # ------------------------------------------------------------------ login failure and status
@@ -439,3 +492,35 @@ def test_check_now_and_status_endpoint(client, world):
     assert done["state"] == "succeeded" and done["result"]["checked"] == 0
     s = client.get("/inbox/status").json()
     assert s["checking"] is False and s["last_checked_at"] and s["next_check_at"] == s["last_checked_at"] + 600
+
+
+def test_manual_status_cannot_reopen_a_lead_that_answered(client, world):
+    ids = seed_inbox(world)
+    for key in ("acme", "ooo"):  # replied; auto-reply
+        r = client.post(f"/leads/{ids[key]}/status", json={"status": "sent"})
+        assert r.status_code == 409 and r.json()["detail"]
+        assert lead_status(world, ids[key]) in {"replied", "auto_reply"}
+    # a lead that has an auto-reply event but was manually pushed to a weaker status still can not go back to sent
+    with world.begin() as c:
+        c.execute(text("UPDATE leads SET status = 'new' WHERE id = :i"), {"i": ids["ooo"]})
+    assert client.post(f"/leads/{ids['ooo']}/status", json={"status": "sent"}).status_code == 409
+    # a quiet lead may still be set to sent
+    with world.begin() as c:
+        c.execute(text("UPDATE leads SET status = 'closed' WHERE id = :i"), {"i": ids["quiet"]})
+    assert client.post(f"/leads/{ids['quiet']}/status", json={"status": "sent"}).status_code == 409  # closed is blocking
+    with world.begin() as c:
+        c.execute(text("UPDATE leads SET status = 'new' WHERE id = :i"), {"i": ids["quiet"]})
+    assert client.post(f"/leads/{ids['quiet']}/status", json={"status": "sent"}).json()["status"] == "sent"
+
+
+def test_close_keeps_the_stronger_status_and_records_a_note(client, world):
+    ids = seed_inbox(world)
+    for key, want in (("stopper", "opted_out"), ("gone", "bounced")):
+        r = client.post(f"/leads/{ids[key]}/status", json={"status": "closed", "outcome": "not_interested"})
+        assert r.status_code == 200 and r.json()["status"] == want and r.json()["outcome"] == "not_interested"
+        assert lead_status(world, ids[key]) == want
+        assert f"status stays {want.replace('_', ' ')}" in count(world, "SELECT notes FROM leads WHERE id = :i", i=ids[key])
+        assert db.is_suppressed({"stopper": "sam@stopper.test", "gone": "nobody@gone.test"}[key], world)
+    # the user's own note wins over the automatic one
+    r = client.post(f"/leads/{ids['stopper']}/status", json={"status": "closed", "notes": "called them"})
+    assert r.json()["status"] == "opted_out" and count(world, "SELECT notes FROM leads WHERE id = :i", i=ids["stopper"]) == "called them"

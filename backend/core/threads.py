@@ -11,6 +11,7 @@ from urllib.parse import quote
 from sqlalchemy import Engine, text
 
 from backend.core import db, events
+from backend.core.outbox import BLOCKING_LEAD_STATUS
 from backend.core.tracker import normalize_message_id
 
 OUTCOMES = ("interested", "not_interested", "meeting_booked")
@@ -168,11 +169,24 @@ def set_status(engine: Engine, lead_id: int, status: str | None, outcome: str | 
                                          "bounced or closed. Suppressed addresses are never contacted again.")
             if lead["status"] in TERMINAL_FACTS and status not in TERMINAL_FACTS | {"closed"}:
                 raise StatusRefused(409, f"This lead is {lead['status'].replace('_', ' ')}; it can not be reopened.")
+            if status not in BLOCKING_LEAD_STATUS:
+                heard = c.execute(text("SELECT 1 FROM events WHERE lead_id = :i AND type IN ('reply','opt_out','bounce','auto_reply') LIMIT 1"),
+                                  {"i": lead_id}).first()
+                if lead["status"] in BLOCKING_LEAD_STATUS or heard:
+                    raise StatusRefused(409, "This lead has replied, bounced, opted out or been closed, so it can not go back "
+                                             "to a state that allows more emails.")
             if status in {"replied", "sent"}:
                 sent = c.execute(text("SELECT 1 FROM messages WHERE lead_id = :i AND sent_at IS NOT NULL"), {"i": lead_id}).first()
                 if not sent:
                     raise StatusRefused(422, f"No email was sent to this lead, so it can not be marked {status}.")
-            sets["status"] = status
+            if status == "closed" and lead["status"] in TERMINAL_FACTS:
+                # keep the stronger fact (bounced / opted out); record that the user closed it in the notes instead
+                kept = f"Closed by you; status stays {lead['status'].replace('_', ' ')}."
+                existing = c.execute(text("SELECT notes FROM leads WHERE id = :i"), {"i": lead_id}).scalar()
+                if notes is None:
+                    notes = f"{existing}\n{kept}" if existing else kept
+            else:
+                sets["status"] = status
             if status == "opted_out":  # a manual opt-out suppresses the address like an automatic one
                 c.execute(text("INSERT OR IGNORE INTO suppression (email, reason) VALUES (:e, 'opt-out (set by you)')"),
                           {"e": lead["email"]})
