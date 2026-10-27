@@ -150,7 +150,7 @@ export class BackendSupervisor extends EventEmitter {
       if (role === 'api') {
         this.waitForHealth()
           .then(() => this.setStatus('ready', 'Ready'))
-          .catch((e: Error) => this.setStatus('failed', e.message))
+          .catch((e: Error) => { if (this.status.state !== 'failed') this.setStatus('failed', e.message) }) // a crash-loop verdict stands
       } else {
         this.setStatus('ready', 'Ready')
       }
