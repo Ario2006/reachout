@@ -33,6 +33,8 @@ _ROLE_WORDS = re.compile(
     r"partner|principal|vp |vice president|president|investor|chairman|chief)\b", re.I)
 PEOPLE_PROMPT_CHARS = 7000  # ~1,750 tokens: team pages list people near the top, and prefill dominates the cost
 _NAME_STOP = frozenset({
+    "head", "of", "and", "the", "at", "in", "lead", "manager", "director", "engineer", "designer", "analyst", "associate",
+    "svp", "evp", "senior", "junior", "global", "regional", "vice", "managing", "general", "assistant", "advisor",
     "customer", "customers", "support", "booking", "bookings", "for", "sales", "service", "enquiry", "enquiries", "inquiry",
     "contact", "helpdesk", "desk", "office", "admin", "general", "query", "queries", "feedback", "complaints", "press",
     "relations", "recruitment", "co", "co-founder", "cofounder", "founder", "founders", "ceo", "cto", "coo", "cfo", "cmo",
@@ -54,6 +56,9 @@ _NAME_STOP = frozenset({
     "terms", "all", "rights", "reserved", "copyright", "inc", "ltd", "llc", "pvt", "private", "limited",
     "capital", "ventures", "partners", "fund", "labs", "technologies", "solutions", "services", "group",
 })
+
+
+_TITLE_HINT_RE = re.compile(r"\b(founder|co-?founder|ceo|cto|coo|cfo|chief|president|partner|principal|director|head of|vp|vice president)\b", re.I)
 
 
 class Person(BaseModel):
@@ -83,6 +88,12 @@ class LeadDraft:
     context_snippet: str = ""
     email_confidence: EmailConfidence = EmailConfidence.published_generic
     notes: str = ""
+    # Provenance and traceability (milestone 2b)
+    page_tier: str = ""
+    page_type: str = ""
+    fetched_at: float = 0.0
+    trace_id: str = ""
+    trace: list[tuple[str, str]] = field(default_factory=list)  # (kind, message): why this lead exists
 
 
 @dataclass
@@ -91,6 +102,7 @@ class PageResult:
     drafts: list[LeadDraft] = field(default_factory=list)
     people: list[tuple[Person, str]] = field(default_factory=list)  # (person, context snippet)
     llm_calls: int = 0
+    needs_llm: bool = False
 
 
 # ---- text ---------------------------------------------------------------------------------
@@ -395,48 +407,21 @@ def extract_page(
     domain: str = "",
     company: str = "",
 ) -> PageResult:
-    """Emails (and, where useful, people) from one page, as lead drafts. Guesses are made site-wide."""
-    res = PageResult()
-    if not page.html:
-        return res
-    hits = [h for h in extract_emails(page.html)
-            if not domains.is_junk_email(h.email) and domains.registrable(domains.split_email(h.email)[1]) in site_domains]
-    res.emails_found = len(hits)
-    text = visible_text(page.html)
-    company = company or company_name(page.html, domain or next(iter(site_domains), ""))
+    """Emails (and, where useful, people) from one page, as lead drafts. Guesses are made site-wide.
+    Plain-code heuristics run first; the model is asked only if they could not resolve who is who."""
+    from backend.core import analysis  # imported here: analysis builds on this module
 
-    personal_looking = [h for h in hits if domains.namelike_local(domains.split_email(h.email)[0])]
-    people: list[Person] = []
-    if people_fn is not None and text and not jobish(page.url) and (personal_looking or team_like(page.url, text)):
+    a = analysis.analyze_page(page.url, page.html, site_domains, domain=domain, company=company)
+    llm_people: list[Person] = []
+    calls = 0
+    if people_fn is not None and a.needs_llm:
         try:
-            people = find_people(main_text(page.html, PEOPLE_PROMPT_CHARS), domain, people_fn)
-            res.llm_calls = 1
+            llm_people = find_people(a.llm_text, domain, people_fn)
+            calls = 1
         except llm.LlmError as e:
             log.info("people extraction skipped for %s: %s", page.url, e)
-    res.people = [(p, person_context(text, p.name)) for p in people]
-
-    for h in hits:
-        local, edomain = domains.split_email(h.email)
-        generic = domains.is_generic_local(local)
-        person = match_person(local, people)
-        if person is None and not generic and domains.namelike_local(local):
-            person = people_near_email(h.context, local)  # a name beside the address, found without the model
-            if person is not None:
-                people.append(person)
-                res.people.append((person, person_context(text, person.name)))
-        note = ""
-        if person:
-            conf, name, role = EmailConfidence.published_personal, person.name, person.role
-            ctx = person_context(text, person.name) or h.context
-        else:
-            # Looks personal but no name on the page matches it, so we cannot call it "personal".
-            conf, name, role, ctx = EmailConfidence.published_generic, "", "", h.context
-            if not generic and domains.namelike_local(local):
-                note = "Looks like a personal address, but no matching name was found on the page"
-        res.drafts.append(LeadDraft(
-            email=h.email, name=name, role=role, company=company, domain=domains.registrable(edomain),
-            source_url=page.url, context_snippet=ctx, email_confidence=conf, notes=note,
-        ))
+    res = analysis.finalize_page(a, llm_people)
+    res.llm_calls = calls
     return res
 
 

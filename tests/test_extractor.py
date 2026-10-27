@@ -311,7 +311,7 @@ def test_a_title_fragment_is_not_part_of_a_name():
     assert r.drafts[0].name == "Tanuj Choudhry"
 
 
-@pytest.mark.parametrize("name", ["Co Founder", "Customer Support", "For Bookings", "Chief Executive", "Mr Kumar"])
+@pytest.mark.parametrize("name", ["Co Founder", "Customer Support", "For Bookings", "Chief Executive", "Mr Kumar", "Head of Design", "Vice President Sales", "Head of Engineering"])
 def test_titles_and_departments_are_not_names(name):
     assert x._valid_name(name, name.lower()) is None
 

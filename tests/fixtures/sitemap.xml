@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+ <url><loc>https://acme-robotics.com/</loc></url>
+ <url><loc>https://acme-robotics.com/leadership</loc></url>
+ <url><loc><![CDATA[https://acme-robotics.com/get-in-touch]]></loc></url>
+ <url><loc>https://acme-robotics.com/blog/post-1</loc></url>
+ <url><loc>https://acme-robotics.com/products/x1</loc></url>
+ <url><loc>https://acme-robotics.com/careers/internships</loc></url>
+ <url><loc>https://evil.com/team</loc></url>
+</urlset>
