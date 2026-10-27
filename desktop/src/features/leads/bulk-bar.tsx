@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { GenerateForSelection } from '@/features/compose/generate-for-selection'
 import { ApiError } from '@/lib/api/client'
 import { useBulk, type BulkBody, type BulkFilter } from '@/lib/api/hooks'
 import type { LeadStatus } from '@/lib/api/types'
@@ -58,6 +59,12 @@ export function BulkBar({ count, total, loaded, ids, allMatching, filter, onSele
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        {allMatching ? (
+          <Tooltip>
+            <TooltipTrigger asChild><span><Button variant="outline" size="sm" disabled>Generate drafts</Button></span></TooltipTrigger>
+            <TooltipContent>Select specific rows to generate drafts</TooltipContent>
+          </Tooltip>
+        ) : <GenerateForSelection ids={ids} />}
         <Tooltip>
           <TooltipTrigger asChild><span><Button variant="outline" size="sm" disabled>Move to campaign</Button></span></TooltipTrigger>
           <TooltipContent>Campaigns arrive in milestone 4</TooltipContent>
