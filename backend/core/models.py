@@ -65,6 +65,11 @@ class AppSettings(BaseModel):
     fetch_timeout_s: int = Field(15, ge=5, le=60)
     search_source: str = Field("ddgs", pattern=r"^(ddgs|searxng)$")
     searxng_url: str = ""
+    crawl_concurrency: int = Field(4, ge=1, le=8)
+    max_domains_per_run: int = Field(60, ge=1, le=300)
+    max_leads_per_site: int = Field(5, ge=1, le=25)
+    target_leads: int = Field(30, ge=0, le=500)  # widen the search until this many new leads (0 = never widen)
+    domain_blocklist_extra: list[str] = Field(default_factory=list)
 
     # State (set only through /setup/complete, never by the generic settings update)
     first_run_complete: bool = False
@@ -88,6 +93,16 @@ class AppSettings(BaseModel):
         if not v or any(d < 0 or d > 6 for d in v):
             raise ValueError("send_days must be a non-empty list of 0..6")
         return sorted(set(v))
+
+    @field_validator("domain_blocklist_extra")
+    @classmethod
+    def _norm_blocklist(cls, v: list[str]) -> list[str]:
+        out = []
+        for d in v:
+            d = d.strip().lower().removeprefix("https://").removeprefix("http://").removeprefix("www.").strip("/")
+            if d and d not in out:
+                out.append(d)
+        return out
 
     @field_validator("gmail_address")
     @classmethod

@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from 'react'
 import { getConnection } from './backend'
 import { jobEventSchema, TERMINAL, useLive } from './jobs-store'
 import { qk } from './api/hooks'
+import { domainEventSchema, logEventSchema, runEventSchema, useLiveRuns } from './runs-store'
 import { streamEvents } from './sse'
 
 /** Opens /events once for the app's lifetime and routes events into the stores and query cache. */
@@ -20,19 +21,49 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           signal: ac.signal,
           onState: setStream,
           onMessage: (m) => {
-            if (m.event !== 'job') return
             let payload: unknown
             try {
               payload = (JSON.parse(m.data) as { payload?: unknown }).payload
             } catch {
               return
             }
-            const parsed = jobEventSchema.safeParse(payload)
-            if (!parsed.success) return
-            upsertJob(parsed.data)
-            if (TERMINAL.has(parsed.data.state)) {
-              void qc.invalidateQueries({ queryKey: qk.setupStatus })
-              void qc.invalidateQueries({ queryKey: qk.models })
+            const runs = useLiveRuns.getState()
+            switch (m.event) {
+              case 'job': {
+                const parsed = jobEventSchema.safeParse(payload)
+                if (!parsed.success) return
+                upsertJob(parsed.data)
+                if (TERMINAL.has(parsed.data.state)) {
+                  void qc.invalidateQueries({ queryKey: qk.setupStatus })
+                  void qc.invalidateQueries({ queryKey: qk.models })
+                  if (parsed.data.kind === 'discovery_run') void qc.invalidateQueries({ queryKey: qk.runs })
+                }
+                return
+              }
+              case 'run': {
+                const r = runEventSchema.safeParse(payload)
+                if (r.success) {
+                  runs.applyRun(r.data)
+                  if (r.data.state !== 'running' && r.data.state !== 'queued') void qc.invalidateQueries({ queryKey: qk.runs })
+                }
+                return
+              }
+              case 'run_domain': {
+                const d = domainEventSchema.safeParse(payload)
+                if (d.success) runs.applyDomain(d.data)
+                return
+              }
+              case 'run_log': {
+                const l = logEventSchema.safeParse(payload)
+                if (l.success) runs.applyLog(l.data)
+                return
+              }
+              case 'lead':
+              case 'lead.updated':
+                runs.bumpLeads()
+                return
+              default:
+                return
             }
           },
         }),

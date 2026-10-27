@@ -1,7 +1,7 @@
 # Architecture
 
 Reachout is a local macOS desktop app. Nothing leaves the machine except your outgoing email and
-polite web requests. This file describes the moving parts as built (through Milestone 1b).
+polite web requests. This file describes the moving parts as built (through Milestone 2).
 
 ```
 ┌──────────────────────── Electron main process ────────────────────────┐
@@ -32,17 +32,19 @@ The API and worker never talk to each other directly. They share state through S
 
 ```
 backend/
-  core/        UI-agnostic logic: config, db, models, secrets, llm, health, jobs, events, job_handlers
-    migrations/  numbered .sql files, applied in order (001_init, 002_jobs_events)
+  core/        UI-agnostic logic: config, db, models, secrets, llm, health, jobs, events, job_handlers,
+               planner, discovery, crawler, extractor, validator, leads, exports, pipeline, domains
+    migrations/  numbered .sql files, applied in order (001_init, 002_jobs_events, 003_lead_pipeline)
   api/         FastAPI app factory, security middleware, schemas, routers/
   worker.py    background process entry
+  cli.py       developer tool: run the pipeline from a terminal
   procutil.py  parent-death watchdog
 desktop/
   electron/    main.ts, preload.ts, backend-supervisor.ts, menu.ts, splash.ts, csp.ts
   shared/      bridge.ts: the main/preload/renderer contract
   src/
     app/         shell, sidebar, command palette, router gate
-    features/    setup/ (wizard), settings/ (7 tabs), account/
+    features/    setup/ (wizard), settings/ (7 tabs), account/, discover/, leads/
     components/  ui/ (shadcn) and small shared components
     lib/         api/ (generated types + typed client + hooks), sse.ts, theme.ts, stores
   e2e/         Playwright (Electron) tests
@@ -87,6 +89,51 @@ Long work is a row in `jobs` (`queued → running → succeeded | failed | cance
 `event_log` is a table rather than an in-memory queue because the producer (worker) and the
 consumer (API) are different processes. It is pruned hourly (newest 2,000 kept).
 A worker that crashed mid-job leaves it `running`; on start, those jobs are marked `failed`.
+
+## The lead pipeline
+
+`pipeline.run_discovery` is the job handler for `discovery_run`. One run is a pipeline of small, separately
+testable modules in `backend/core`:
+
+```
+request ──planner──▶ Plan ──discovery──▶ candidate sites ──crawler──▶ pages ──extractor──▶ lead drafts
+ (LLM, 1 call)     (editable)  ddgs + list pages        robots, pacing       emails, people      │
+                                + OpenStreetMap                                                  ▼
+                                                              validator (syntax, MX) ──leads.ingest──▶ SQLite ──▶ `lead` events
+```
+
+- **Planner** asks the model for a plan as JSON (structured output, validated by Pydantic). If the model
+  is unreachable or returns junk twice, a deterministic template plan is used and labelled as such.
+  Model queries about job listings are dropped, and template queries (company pages and "top N" lists)
+  are always added, because job-board results were the main source of bad leads.
+- **Discovery** runs the queries through `ddgs` (or a local SearXNG), applies the blocklist, ranks one
+  candidate per registrable domain, and optionally follows list pages ("Top 50 AI startups in
+  Bangalore") to the companies they link to. Service mode can also query OpenStreetMap.
+- **Crawler** fetches the homepage, the search hit, keyword-matched links and common paths, up to the page
+  cap. robots.txt follows RFC 9309 (4xx = no rules, 5xx or unreachable = disallow). Requests to one host
+  are paced, responses are capped at 2 MB, and private/loopback hosts are refused.
+- **Extractor** finds addresses in `mailto:` links, Cloudflare-protected links and visible text (with
+  `[at]`/`[dot]` de-obfuscation), rejects image-like, placeholder and automated ones, and keeps only
+  addresses on the site's own domain. It calls the model for people only on pages that look like team
+  pages, never on job listings or portfolio/news/list pages, and only keeps a name that literally appears
+  on the page. A person is only `personal` when a name on the page matches the address; a guess is only made
+  for a target-role person listed on the site's own team page whose role is a plain title.
+- **Validator** checks syntax and that the domain has an MX record (cached, retried once).
+- **Leads** stores everything with its source URL and a context snippet taken from the page. Suppressed
+  addresses are skipped, duplicates are ignored, and a published address upgrades a guessed one.
+
+If a run finishes short of its target (default 30 leads) it **widens**: it searches with fresh wording
+(`planner.more_queries`), follows more list pages, and crawls only sites it has not seen, for up to 4 rounds, about
+12 minutes, or the site limit. Each site keeps at most 5 leads (`select_best` ranks them for the kind of outreach),
+because one large company can otherwise contribute dozens of regional mailboxes.
+
+Sites are processed a few at a time (default 4). Each site is crawled, read, validated and stored as a unit,
+so leads appear in the UI as soon as their site finishes. Only one model call runs at a time (a process-wide
+lock), and a run stops at 25 minutes. Cancelling keeps everything found so far.
+
+The UI follows a run through four SSE event types: `run` (stage and counters), `run_domain`, `run_log`, and
+`lead`. State is also in the database (`search_runs`, `run_domains`, `run_log`), so a reload rebuilds the
+screen.
 
 ## Supervision
 

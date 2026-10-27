@@ -9,7 +9,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from backend.core import config, db, events, jobs
+from backend.core import config, db, events, jobs, pipeline
 from backend.core.job_handlers import HANDLERS
 from backend.procutil import start_parent_watchdog
 
@@ -44,6 +44,7 @@ def main() -> None:
     recovered = jobs.recover_stale(engine)
     if recovered:
         log.warning("marked %d stale running job(s) as failed", recovered)
+    pipeline.reconcile_runs(engine)
     events.prune(engine=engine)
     runner = jobs.JobRunner(engine, HANDLERS)
     sched = build_scheduler(engine, runner)

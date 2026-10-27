@@ -6,13 +6,17 @@ import { useUpdateSettings } from '@/lib/api/hooks'
 import type { SettingsUpdate } from '@/lib/api/types'
 
 /** Submit handler shared by the settings tabs: PUT /settings, then show notices, warnings, field errors. */
-export function useSectionSave<T extends FieldValues & SettingsUpdate>(form: UseFormReturn<T>) {
+export function useSectionSave<T extends FieldValues>(
+  form: UseFormReturn<T>,
+  /** Convert form values to the API shape when they differ (e.g. a textarea that holds a list). */
+  transform?: (values: T) => SettingsUpdate,
+) {
   const update = useUpdateSettings()
   const [warnings, setWarnings] = useState<string[]>([])
 
   const submit = form.handleSubmit(async (values) => {
     try {
-      const res = await update.mutateAsync(values)
+      const res = await update.mutateAsync(transform ? transform(values) : (values as unknown as SettingsUpdate))
       form.reset(values)
       setWarnings(res.warnings)
       for (const n of res.notices) toast.info(n)

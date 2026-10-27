@@ -19,11 +19,21 @@ export function settingsFixture(over: Partial<components['schemas']['AppSettings
       daily_cap: 25, delay_min_s: 60, delay_max_s: 180, window_start: '09:00', window_end: '18:00',
       send_days: [0, 1, 2, 3, 4, 5], allow_guessed_emails: false,
       max_pages_per_domain: 6, crawl_delay_min_s: 1, crawl_delay_max_s: 2, fetch_timeout_s: 15,
-      search_source: 'ddgs', searxng_url: '', first_run_complete: true, legal_acknowledged: true,
+      search_source: 'ddgs', searxng_url: '', crawl_concurrency: 4, max_domains_per_run: 60, max_leads_per_site: 5, target_leads: 30, domain_blocklist_extra: [],
+      first_run_complete: true, legal_acknowledged: true,
       ...over,
     },
     gmail_password_set: false, warnings: [], notices: [], limits: { hard_daily_ceiling: 100 },
     ...extra,
+  }
+}
+
+/** JSON bodies are parsed; anything else (e.g. CSV) is kept as text. */
+function parseBody(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return raw
   }
 }
 
@@ -40,7 +50,7 @@ export function mockApi(routes: Record<string, Handler | { status?: number; json
     const key = `${method} ${url.pathname}`
     const call: Call = {
       method, path: url.pathname + url.search,
-      body: typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+      body: typeof init?.body === 'string' ? parseBody(init.body) : undefined,
       headers: new Headers(init?.headers),
     }
     calls.push(call)

@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -47,7 +48,7 @@ def healthy(monkeypatch):
 def _all_routes(app):
     for path, ops in app.openapi()["paths"].items():
         for method in ops:
-            yield method.upper(), path.replace("{job_id}", "1")
+            yield method.upper(), re.sub(r"\{[a-z_]+\}", "1", path)
 
 
 def test_every_route_rejects_missing_and_wrong_token(app, anon):
@@ -358,3 +359,19 @@ def test_openapi_export_has_no_runtime_leaks(app):
         for prop, spec in s.get("properties", {}).items():
             if "password" in prop:  # status flags such as password_set must be booleans
                 assert spec.get("type") == "boolean", (name, prop)
+
+
+@pytest.mark.parametrize("method", ["GET", "POST", "PUT", "PATCH", "DELETE"])
+def test_cors_preflight_allows_every_method_the_ui_uses(anon, method):
+    """The renderer is a different origin, so each method it calls needs a passing preflight. (PATCH was
+    once missing, which silently broke inline edits and the lead drawer.)"""
+    r = anon.options("/leads/1", headers={"Origin": ORIGIN, "Access-Control-Request-Method": method,
+                                          "Access-Control-Request-Headers": "authorization,content-type"})
+    assert r.status_code == 200 and r.headers["access-control-allow-origin"] == ORIGIN
+    assert method in r.headers["access-control-allow-methods"]
+
+
+def test_every_http_method_in_the_api_is_covered_by_cors(app):
+    used = {m.upper() for ops in app.openapi()["paths"].values() for m in ops}
+    allowed = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+    assert used <= allowed, f"add {used - allowed} to the CORS allow_methods"

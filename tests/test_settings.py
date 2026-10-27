@@ -13,6 +13,7 @@ def test_defaults_match_spec(engine):
     assert (s.daily_cap, s.delay_min_s, s.delay_max_s) == (25, 60, 180)
     assert (s.window_start, s.window_end, s.send_days) == ("09:00", "18:00", [0, 1, 2, 3, 4, 5])
     assert s.max_pages_per_domain == 6 and s.fetch_timeout_s == 15
+    assert (s.max_leads_per_site, s.max_domains_per_run, s.crawl_concurrency) == (5, 60, 4)
     assert s.allow_guessed_emails is False
 
 

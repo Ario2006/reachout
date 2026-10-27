@@ -9,6 +9,13 @@
             "title": "Allow Guessed Emails",
             "type": "boolean"
           },
+          "crawl_concurrency": {
+            "default": 4,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Crawl Concurrency",
+            "type": "integer"
+          },
           "crawl_delay_max_s": {
             "default": 2.0,
             "minimum": 0.5,
@@ -44,6 +51,13 @@
             "title": "Display Name",
             "type": "string"
           },
+          "domain_blocklist_extra": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Domain Blocklist Extra",
+            "type": "array"
+          },
           "fetch_timeout_s": {
             "default": 15,
             "maximum": 60.0,
@@ -75,6 +89,20 @@
             "default": false,
             "title": "Legal Acknowledged",
             "type": "boolean"
+          },
+          "max_domains_per_run": {
+            "default": 60,
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Max Domains Per Run",
+            "type": "integer"
+          },
+          "max_leads_per_site": {
+            "default": 5,
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Max Leads Per Site",
+            "type": "integer"
           },
           "max_pages_per_domain": {
             "default": 6,
@@ -113,6 +141,13 @@
             "title": "Send Days",
             "type": "array"
           },
+          "target_leads": {
+            "default": 30,
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Target Leads",
+            "type": "integer"
+          },
           "window_end": {
             "default": "18:00",
             "title": "Window End",
@@ -125,6 +160,76 @@
           }
         },
         "title": "AppSettings",
+        "type": "object"
+      },
+      "BulkRequest": {
+        "properties": {
+          "action": {
+            "enum": [
+              "delete",
+              "set_status",
+              "suppress"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadFilter"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "BulkRequest",
+        "type": "object"
+      },
+      "BulkResult": {
+        "properties": {
+          "affected": {
+            "title": "Affected",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "affected",
+          "skipped"
+        ],
+        "title": "BulkResult",
         "type": "object"
       },
       "CheckOut": {
@@ -185,6 +290,15 @@
         ],
         "title": "CompleteSetup",
         "type": "object"
+      },
+      "EmailConfidence": {
+        "enum": [
+          "published_personal",
+          "published_generic",
+          "guessed"
+        ],
+        "title": "EmailConfidence",
+        "type": "string"
       },
       "GmailStatus": {
         "properties": {
@@ -284,6 +398,80 @@
           "worker"
         ],
         "title": "HealthOut",
+        "type": "object"
+      },
+      "ImportIssue": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "email",
+          "reason"
+        ],
+        "title": "ImportIssue",
+        "type": "object"
+      },
+      "ImportReportOut": {
+        "properties": {
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "inserted": {
+            "title": "Inserted",
+            "type": "integer"
+          },
+          "invalid": {
+            "title": "Invalid",
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ImportIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "no_mx": {
+            "title": "No Mx",
+            "type": "integer"
+          },
+          "suppressed": {
+            "title": "Suppressed",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "valid",
+          "inserted",
+          "duplicates",
+          "suppressed",
+          "invalid",
+          "no_mx",
+          "issues"
+        ],
+        "title": "ImportReportOut",
         "type": "object"
       },
       "JobOut": {
@@ -391,6 +579,461 @@
         "title": "JobOut",
         "type": "object"
       },
+      "LeadDetail": {
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "context_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Snippet"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "email_confidence": {
+            "$ref": "#/components/schemas/EmailConfidence"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "search_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Run Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LeadStatus"
+          },
+          "timeline": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TimelineItem"
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "email_confidence",
+          "status",
+          "created_at"
+        ],
+        "title": "LeadDetail",
+        "type": "object"
+      },
+      "LeadFilter": {
+        "properties": {
+          "confidence": {
+            "items": {
+              "$ref": "#/components/schemas/EmailConfidence"
+            },
+            "title": "Confidence",
+            "type": "array"
+          },
+          "mode": {
+            "items": {
+              "$ref": "#/components/schemas/Mode"
+            },
+            "title": "Mode",
+            "type": "array"
+          },
+          "q": {
+            "default": "",
+            "title": "Q",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status": {
+            "items": {
+              "$ref": "#/components/schemas/LeadStatus"
+            },
+            "title": "Status",
+            "type": "array"
+          }
+        },
+        "title": "LeadFilter",
+        "type": "object"
+      },
+      "LeadOut": {
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "email_confidence": {
+            "$ref": "#/components/schemas/EmailConfidence"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "search_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Run Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LeadStatus"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "email_confidence",
+          "status",
+          "created_at"
+        ],
+        "title": "LeadOut",
+        "type": "object"
+      },
+      "LeadPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "LeadPatch",
+        "type": "object"
+      },
+      "LeadRun": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "request_text": {
+            "title": "Request Text",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "request_text",
+          "started_at"
+        ],
+        "title": "LeadRun",
+        "type": "object"
+      },
+      "LeadStatus": {
+        "enum": [
+          "new",
+          "drafted",
+          "approved",
+          "queued",
+          "sent",
+          "replied",
+          "bounced",
+          "opted_out",
+          "auto_reply",
+          "closed"
+        ],
+        "title": "LeadStatus",
+        "type": "string"
+      },
+      "LeadsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeadOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "LeadsPage",
+        "type": "object"
+      },
       "Limits": {
         "properties": {
           "hard_daily_ceiling": {
@@ -403,6 +1046,15 @@
         ],
         "title": "Limits",
         "type": "object"
+      },
+      "Mode": {
+        "enum": [
+          "internship",
+          "investor",
+          "service"
+        ],
+        "title": "Mode",
+        "type": "string"
       },
       "ModelsOut": {
         "properties": {
@@ -425,6 +1077,110 @@
         "title": "ModelsOut",
         "type": "object"
       },
+      "Plan": {
+        "properties": {
+          "industries": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Industries",
+            "type": "array"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/Mode"
+          },
+          "regions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Regions",
+            "type": "array"
+          },
+          "search_queries": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Search Queries",
+            "type": "array"
+          },
+          "target_roles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Target Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "Plan",
+        "type": "object"
+      },
+      "PlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "request": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Request",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "title": "PlanRequest",
+        "type": "object"
+      },
+      "PlanResponse": {
+        "properties": {
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "source": {
+            "enum": [
+              "llm",
+              "fallback"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "source"
+        ],
+        "title": "PlanResponse",
+        "type": "object"
+      },
       "PullModelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -441,6 +1197,369 @@
           }
         },
         "title": "PullModelRequest",
+        "type": "object"
+      },
+      "RunDetail": {
+        "properties": {
+          "domains": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunDomainOut"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "leads_found": {
+            "default": 0,
+            "title": "Leads Found",
+            "type": "integer"
+          },
+          "log": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunLogLine"
+            },
+            "title": "Log",
+            "type": "array"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "pages_fetched": {
+            "default": 0,
+            "title": "Pages Fetched",
+            "type": "integer"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "request_text": {
+            "title": "Request Text",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Stats",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "request_text",
+          "state",
+          "started_at",
+          "plan"
+        ],
+        "title": "RunDetail",
+        "type": "object"
+      },
+      "RunDomainOut": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "emails": {
+            "default": 0,
+            "title": "Emails",
+            "type": "integer"
+          },
+          "leads": {
+            "default": 0,
+            "title": "Leads",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "pages": {
+            "default": 0,
+            "title": "Pages",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "domain",
+          "state"
+        ],
+        "title": "RunDomainOut",
+        "type": "object"
+      },
+      "RunLogLine": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "message",
+          "created_at"
+        ],
+        "title": "RunLogLine",
+        "type": "object"
+      },
+      "RunOptionsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expand_lists": {
+            "default": true,
+            "title": "Expand Lists",
+            "type": "boolean"
+          },
+          "max_domains": {
+            "anyOf": [
+              {
+                "maximum": 300.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Domains"
+          },
+          "recrawl": {
+            "default": false,
+            "title": "Recrawl",
+            "type": "boolean"
+          },
+          "use_overpass": {
+            "default": false,
+            "title": "Use Overpass",
+            "type": "boolean"
+          }
+        },
+        "title": "RunOptionsIn",
+        "type": "object"
+      },
+      "RunOut": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "leads_found": {
+            "default": 0,
+            "title": "Leads Found",
+            "type": "integer"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "pages_fetched": {
+            "default": 0,
+            "title": "Pages Fetched",
+            "type": "integer"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "request_text": {
+            "title": "Request Text",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Stats",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "request_text",
+          "state",
+          "started_at",
+          "plan"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "RunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "options": {
+            "$ref": "#/components/schemas/RunOptionsIn",
+            "default": {
+              "expand_lists": true,
+              "recrawl": false,
+              "use_overpass": false
+            }
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "request_text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Request Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_text",
+          "plan"
+        ],
+        "title": "RunRequest",
         "type": "object"
       },
       "SettingsResponse": {
@@ -494,6 +1613,17 @@
               }
             ],
             "title": "Allow Guessed Emails"
+          },
+          "crawl_concurrency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Concurrency"
           },
           "crawl_delay_max_s": {
             "anyOf": [
@@ -561,6 +1691,20 @@
             ],
             "title": "Display Name"
           },
+          "domain_blocklist_extra": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Blocklist Extra"
+          },
           "fetch_timeout_s": {
             "anyOf": [
               {
@@ -593,6 +1737,28 @@
               }
             ],
             "title": "Keep Alive"
+          },
+          "max_domains_per_run": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Domains Per Run"
+          },
+          "max_leads_per_site": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Leads Per Site"
           },
           "max_pages_per_domain": {
             "anyOf": [
@@ -662,6 +1828,17 @@
               }
             ],
             "title": "Send Days"
+          },
+          "target_leads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Leads"
           },
           "window_end": {
             "anyOf": [
@@ -797,6 +1974,41 @@
         "title": "SuppressionEntry",
         "type": "object"
       },
+      "TimelineItem": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "TimelineItem",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -880,6 +2092,221 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/discovery/plan": {
+      "post": {
+        "description": "Turn a plain-English request into an editable plan. Falls back to templates if the model is down.",
+        "operationId": "make_plan_discovery_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Make Plan",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/discovery/run": {
+      "post": {
+        "description": "Queue a discovery run (executed by the worker). Only one run at a time on an 8 GB machine.",
+        "operationId": "start_run_discovery_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Run",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/discovery/runs": {
+      "get": {
+        "operationId": "list_runs_discovery_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunOut"
+                  },
+                  "title": "Response List Runs Discovery Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/discovery/runs/{run_id}": {
+      "get": {
+        "operationId": "get_run_discovery_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/discovery/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_run_discovery_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Run",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
     "/events": {
       "get": {
         "description": "New events only by default; send Last-Event-ID to resume after a reconnect.",
@@ -1103,6 +2530,420 @@
         "summary": "Cancel Job",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/leads": {
+      "get": {
+        "operationId": "list_leads_leads_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/LeadStatus"
+              },
+              "title": "Status",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/Mode"
+              },
+              "title": "Mode",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confidence",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/EmailConfidence"
+              },
+              "title": "Confidence",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Leads",
+        "tags": [
+          "leads"
+        ]
+      }
+    },
+    "/leads/bulk": {
+      "post": {
+        "operationId": "bulk_leads_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk",
+        "tags": [
+          "leads"
+        ]
+      }
+    },
+    "/leads/export.csv": {
+      "get": {
+        "operationId": "export_csv_leads_export_csv_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/LeadStatus"
+              },
+              "title": "Status",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/Mode"
+              },
+              "title": "Mode",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confidence",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/EmailConfidence"
+              },
+              "title": "Confidence",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Sort",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Csv",
+        "tags": [
+          "leads"
+        ]
+      }
+    },
+    "/leads/import-csv": {
+      "post": {
+        "description": "Body is the raw CSV text. With dry_run=true nothing is saved and the report previews the result.",
+        "operationId": "import_csv_leads_import_csv_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Csv",
+        "tags": [
+          "leads"
+        ]
+      }
+    },
+    "/leads/{lead_id}": {
+      "get": {
+        "operationId": "get_lead_leads__lead_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lead_id",
+            "required": true,
+            "schema": {
+              "title": "Lead Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lead",
+        "tags": [
+          "leads"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_lead_leads__lead_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lead_id",
+            "required": true,
+            "schema": {
+              "title": "Lead Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Lead",
+        "tags": [
+          "leads"
         ]
       }
     },

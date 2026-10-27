@@ -3,6 +3,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { SettingsResponse } from '@/lib/api/types'
 import { SaveBar, Section, Warnings } from '../form-bits'
@@ -18,6 +19,11 @@ const schema = z.object({
   fetch_timeout_s: num(5, 60),
   search_source: z.enum(['ddgs', 'searxng']),
   searxng_url: z.string().trim(),
+  crawl_concurrency: num(1, 8),
+  max_domains_per_run: num(1, 300),
+  max_leads_per_site: num(1, 25),
+  target_leads: num(0, 500),
+  blocklist_text: z.string(),
 }).refine((v) => v.crawl_delay_max_s >= v.crawl_delay_min_s, { path: ['crawl_delay_max_s'], error: 'Must be at least the minimum' })
   .refine((v) => v.search_source !== 'searxng' || v.searxng_url !== '', { path: ['searxng_url'], error: 'Required when SearXNG is the search source' })
 type Values = z.infer<typeof schema>
@@ -30,9 +36,14 @@ export function CrawlingTab({ data }: { data: SettingsResponse }) {
       max_pages_per_domain: s.max_pages_per_domain, crawl_delay_min_s: s.crawl_delay_min_s,
       crawl_delay_max_s: s.crawl_delay_max_s, fetch_timeout_s: s.fetch_timeout_s,
       search_source: s.search_source === 'searxng' ? 'searxng' : 'ddgs', searxng_url: s.searxng_url,
+      crawl_concurrency: s.crawl_concurrency ?? 4, max_domains_per_run: s.max_domains_per_run ?? 60, max_leads_per_site: s.max_leads_per_site ?? 5, target_leads: s.target_leads ?? 30,
+      blocklist_text: (s.domain_blocklist_extra ?? []).join('\n'),
     },
   })
-  const { submit, warnings, saving } = useSectionSave(form)
+  const { submit, warnings, saving } = useSectionSave(form, ({ blocklist_text, ...rest }) => ({
+    ...rest,
+    domain_blocklist_extra: blocklist_text.split(/[\s,]+/).filter(Boolean),
+  }))
   const e = form.formState.errors
   const source = form.watch('search_source')
 
@@ -62,6 +73,46 @@ export function CrawlingTab({ data }: { data: SettingsResponse }) {
               <FieldError errors={[e.crawl_delay_max_s]} />
             </Field>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field data-invalid={!!e.max_domains_per_run}>
+              <FieldLabel htmlFor="max-domains">Sites per search</FieldLabel>
+              <Input id="max-domains" type="number" aria-invalid={!!e.max_domains_per_run} {...form.register('max_domains_per_run', { valueAsNumber: true })} />
+              <FieldDescription>The most sites one search will crawl.</FieldDescription>
+              <FieldError errors={[e.max_domains_per_run]} />
+            </Field>
+            <Field data-invalid={!!e.crawl_concurrency}>
+              <FieldLabel htmlFor="concurrency">Sites crawled at once</FieldLabel>
+              <Input id="concurrency" type="number" aria-invalid={!!e.crawl_concurrency} {...form.register('crawl_concurrency', { valueAsNumber: true })} />
+              <FieldDescription>Each site is still paced by the delay above. 4 suits an 8 GB Mac.</FieldDescription>
+              <FieldError errors={[e.crawl_concurrency]} />
+            </Field>
+          </div>
+          <Field data-invalid={!!e.target_leads}>
+            <FieldLabel htmlFor="target-leads">Aim for this many leads per search</FieldLabel>
+            <Input id="target-leads" type="number" className="w-32" aria-invalid={!!e.target_leads} {...form.register('target_leads', { valueAsNumber: true })} />
+            <FieldDescription>
+              If a search finds fewer, it keeps going with new wording and more list pages (up to about 12 minutes or the site limit).
+              Set 0 to run each search once.
+            </FieldDescription>
+            <FieldError errors={[e.target_leads]} />
+          </Field>
+          <Field data-invalid={!!e.max_leads_per_site}>
+            <FieldLabel htmlFor="max-leads-site">Leads kept per site</FieldLabel>
+            <Input id="max-leads-site" type="number" className="w-32" aria-invalid={!!e.max_leads_per_site} {...form.register('max_leads_per_site', { valueAsNumber: true })} />
+            <FieldDescription>
+              A large company's contact page can list dozens of regional mailboxes. Each site keeps its best few for your
+              kind of outreach, for example careers@ and jobs@ before sales@ when looking for internships.
+            </FieldDescription>
+            <FieldError errors={[e.max_leads_per_site]} />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="blocklist">Sites to never crawl</FieldLabel>
+            <Textarea id="blocklist" rows={4} placeholder={'example.com\nanother-site.org'} className="font-mono text-xs" {...form.register('blocklist_text')} />
+            <FieldDescription>
+              One domain per line, in addition to the built-in list (social networks, job boards, news and directory sites, code hosts,
+              universities and government sites), which cannot be edited.
+            </FieldDescription>
+          </Field>
           <Field>
             <FieldLabel htmlFor="search-source">Search source</FieldLabel>
             <Controller control={form.control} name="search_source" render={({ field }) => (

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from backend.core import db, llm
+from backend.core.pipeline import run_discovery
 from backend.core.jobs import Handler, JobContext
 
 
@@ -18,4 +19,4 @@ def pull_model(ctx: JobContext, payload: dict) -> dict:
     return {"model": model}
 
 
-HANDLERS: dict[str, Handler] = {"pull_model": pull_model}
+HANDLERS: dict[str, Handler] = {"pull_model": pull_model, "discovery_run": run_discovery}

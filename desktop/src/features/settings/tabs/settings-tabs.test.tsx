@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { mockApi, renderWithProviders, settingsFixture } from '@/test/utils'
+import { CrawlingTab } from './crawling-tab'
 import { SendingTab } from './sending-tab'
 import { SuppressionTab } from './suppression-tab'
 
@@ -104,5 +105,37 @@ describe('SuppressionTab', () => {
     await userEvent.type(screen.getByLabelText('Email to suppress'), 'new@x.com')
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ email: 'new@x.com' }))
+  })
+})
+
+
+describe('CrawlingTab', () => {
+  it('saves the blocklist as a clean list of domains plus the crawl limits', async () => {
+    const { calls } = mockApi({ 'PUT /settings': { json: settingsFixture() }, 'GET /setup/status': { json: {} } })
+    renderWithProviders(<CrawlingTab data={settingsFixture({ domain_blocklist_extra: ['old.com'] })} />)
+    const box = screen.getByLabelText('Sites to never crawl')
+    expect(box).toHaveValue('old.com')
+    await userEvent.clear(box)
+    await userEvent.type(box, 'spam.io, junk.net{Enter}third.org')
+    const cap = screen.getByLabelText('Sites per search')
+    await userEvent.clear(cap)
+    await userEvent.type(cap, '90')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true))
+    const body = calls.find((c) => c.method === 'PUT')?.body as Record<string, unknown>
+    expect(body['domain_blocklist_extra']).toEqual(['spam.io', 'junk.net', 'third.org'])
+    expect(body['max_domains_per_run']).toBe(90)
+    expect(body).not.toHaveProperty('blocklist_text')
+  })
+
+  it('rejects out-of-range limits inline without calling the API', async () => {
+    const { calls } = mockApi({})
+    renderWithProviders(<CrawlingTab data={settingsFixture()} />)
+    const c = screen.getByLabelText('Sites crawled at once')
+    await userEvent.clear(c)
+    await userEvent.type(c, '20')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('At most 8')).toBeInTheDocument()
+    expect(calls).toHaveLength(0)
   })
 })

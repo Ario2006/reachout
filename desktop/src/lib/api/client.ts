@@ -1,7 +1,7 @@
 import { getConnection } from '@/lib/backend'
 import type { paths } from './schema'
 
-type Method = 'get' | 'post' | 'put' | 'delete'
+type Method = 'get' | 'post' | 'put' | 'patch' | 'delete'
 type PathsWith<M extends Method> = {
   [P in keyof paths]: paths[P] extends Record<M, unknown> ? P : never
 }[keyof paths]
@@ -25,6 +25,8 @@ export interface RequestOptions<O> {
   params?: PathParams<O>
   query?: QueryParams<O>
   body?: JsonBody<O>
+  /** Raw text body (e.g. CSV) sent instead of JSON. */
+  raw?: { text: string; contentType: string }
   signal?: AbortSignal
 }
 
@@ -72,7 +74,8 @@ function buildUrl(base: string, template: string, params: unknown, query: unknow
   const qs = new URLSearchParams()
   if (query && typeof query === 'object') {
     for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
+      if (Array.isArray(v)) for (const item of v) qs.append(k, String(item))
+      else if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
     }
   }
   const s = qs.toString()
@@ -87,7 +90,10 @@ export async function request<P extends keyof paths, M extends Method>(
   const { baseUrl, token } = await getConnection()
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
   const init: RequestInit = { method: method.toUpperCase(), headers, signal: opts.signal ?? null }
-  if (opts.body !== undefined) {
+  if (opts.raw !== undefined) {
+    headers['Content-Type'] = opts.raw.contentType
+    init.body = opts.raw.text
+  } else if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json'
     init.body = JSON.stringify(opts.body)
   }
@@ -117,6 +123,21 @@ export const api = {
     request('post', path, opts),
   put: <P extends PathsWith<'put'>>(path: P, opts?: RequestOptions<Op<P, 'put'>>) =>
     request('put', path, opts),
+  patch: <P extends PathsWith<'patch'>>(path: P, opts?: RequestOptions<Op<P, 'patch'>>) =>
+    request('patch', path, opts),
   delete: <P extends PathsWith<'delete'>>(path: P, opts?: RequestOptions<Op<P, 'delete'>>) =>
     request('delete', path, opts),
+}
+
+/** GET a text resource (CSV export) with the bearer token. */
+export async function fetchText(path: string, query: Record<string, unknown> = {}): Promise<string> {
+  const { baseUrl, token } = await getConnection()
+  let res: Response
+  try {
+    res = await fetch(buildUrl(baseUrl, path, undefined, query), { headers: { Authorization: `Bearer ${token}` } })
+  } catch {
+    throw new ApiError(0, 'Cannot reach the backend. It may be restarting.')
+  }
+  if (!res.ok) throw new ApiError(res.status, `Request failed (${res.status})`)
+  return res.text()
 }

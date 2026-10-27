@@ -35,11 +35,12 @@ test.describe('app shell (wizard skipped)', () => {
   })
   test.afterAll(async () => { await app.close() })
 
-  test('sidebar shows 7 screens; only Settings is enabled', async () => {
+  test('sidebar shows 7 screens; Discover, Leads and Settings are enabled', async () => {
     const nav = page.getByRole('navigation', { name: 'Main' })
     await expect(nav.getByRole('link')).toHaveCount(7)
-    await expect(nav.locator('[aria-disabled="true"]')).toHaveCount(6)
-    await expect(nav.getByRole('link', { name: 'Settings' })).toBeVisible()
+    await expect(nav.locator('[aria-disabled="true"]')).toHaveCount(4) // Dashboard, Compose, Campaigns, Inbox
+    await expect(page.getByRole('heading', { name: 'Discover' })).toBeVisible() // the app opens on Discover
+    await nav.getByRole('link', { name: 'Settings' }).click()
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
     await page.screenshot({ path: `${SHOTS}/settings-account-light.png` })
   })
@@ -88,7 +89,7 @@ test.describe('app shell (wizard skipped)', () => {
     await page.keyboard.press('Meta+k')
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await page.getByPlaceholder('Type a command…').fill('suppression')
+    await page.getByPlaceholder(/Type a command/).fill('suppression')
     await page.getByRole('option', { name: /Settings: Suppression/ }).click()
     await expect(page.getByRole('tab', { name: 'Suppression', selected: true })).toBeVisible()
     await expect(page.getByText('Nobody is suppressed yet')).toBeVisible()

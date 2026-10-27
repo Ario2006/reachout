@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routers import events, health, jobs, settings, setup, suppression
+from backend.api.routers import discovery, events, health, jobs, leads, settings, setup, suppression
 from backend.api.security import SecurityMiddleware
 from backend.core import config, db
 from backend.procutil import start_parent_watchdog
@@ -39,11 +39,11 @@ def create_app(token: str | None = None, allowed_origins: list[str] | None = Non
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type", "Last-Event-ID"],
         max_age=600,
     )
-    for r in (health, setup, settings, suppression, jobs, events):
+    for r in (health, setup, settings, suppression, jobs, events, discovery, leads):
         app.include_router(r.router)
     return app
 

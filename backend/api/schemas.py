@@ -1,11 +1,12 @@
 """Request/response models. These drive the generated OpenAPI schema and TypeScript client."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, create_model
 
-from backend.core.models import AppSettings
+from backend.core.models import AppSettings, EmailConfidence, LeadStatus, Mode
+from backend.core.planner import Plan
 
 # Fields the generic settings update must never touch.
 _PROTECTED = {"gmail_address", "first_run_complete", "legal_acknowledged"}
@@ -127,3 +128,142 @@ class SuppressionEntry(BaseModel):
 class SuppressionAdd(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
+
+
+# ---- discovery ------------------------------------------------------------------------------
+
+class PlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request: str = Field(min_length=1, max_length=2000)
+    mode: Optional[Mode] = None
+
+
+class PlanResponse(BaseModel):
+    plan: Plan
+    source: Literal["llm", "fallback"]
+    note: str = ""
+
+
+class RunOptionsIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    recrawl: bool = False
+    use_overpass: bool = False
+    expand_lists: bool = True
+    max_domains: Optional[int] = Field(default=None, ge=1, le=300)
+
+
+class RunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_text: str = Field(min_length=1, max_length=2000)
+    plan: Plan
+    options: RunOptionsIn = RunOptionsIn()
+
+
+class RunOut(BaseModel):
+    id: int
+    request_text: str
+    mode: Optional[str] = None
+    state: str
+    stage: Optional[str] = None
+    stats: dict[str, object] = {}
+    started_at: str
+    finished_at: Optional[str] = None
+    pages_fetched: int = 0
+    leads_found: int = 0
+    error: Optional[str] = None
+    job_id: Optional[int] = None
+    plan: Plan
+
+
+class RunDomainOut(BaseModel):
+    domain: str
+    url: Optional[str] = None
+    state: str
+    pages: int = 0
+    emails: int = 0
+    leads: int = 0
+    note: Optional[str] = None
+
+
+class RunLogLine(BaseModel):
+    id: int
+    message: str
+    created_at: str
+
+
+class RunDetail(RunOut):
+    domains: list[RunDomainOut] = []
+    log: list[RunLogLine] = []
+
+
+# ---- leads ----------------------------------------------------------------------------------
+
+class LeadOut(BaseModel):
+    id: int
+    name: Optional[str] = None
+    email: str
+    role: Optional[str] = None
+    company: Optional[str] = None
+    domain: Optional[str] = None
+    source_url: Optional[str] = None
+    email_confidence: EmailConfidence
+    mode: Optional[Mode] = None
+    status: LeadStatus
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: Optional[str] = None
+    search_run_id: Optional[int] = None
+
+
+class LeadsPage(BaseModel):
+    items: list[LeadOut]
+    total: int
+
+
+class TimelineItem(BaseModel):
+    type: str
+    detail: Optional[str] = None
+    at: Optional[str] = None
+
+
+class LeadRun(BaseModel):
+    id: int
+    request_text: str
+    started_at: str
+
+
+class LeadDetail(LeadOut):
+    context_snippet: Optional[str] = None
+    run: Optional[LeadRun] = None
+    timeline: list[TimelineItem] = []
+
+
+class LeadPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Optional[str] = Field(default=None, max_length=200)
+    role: Optional[str] = Field(default=None, max_length=200)
+    company: Optional[str] = Field(default=None, max_length=200)
+    notes: Optional[str] = Field(default=None, max_length=5000)
+    status: Optional[LeadStatus] = None
+
+
+class BulkResult(BaseModel):
+    affected: int
+    skipped: int
+
+
+class ImportIssue(BaseModel):
+    row: int
+    email: str
+    reason: str
+
+
+class ImportReportOut(BaseModel):
+    total: int
+    valid: int
+    inserted: int
+    duplicates: int
+    suppressed: int
+    invalid: int
+    no_mx: int
+    issues: list[ImportIssue]
