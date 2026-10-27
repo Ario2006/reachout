@@ -143,16 +143,21 @@ def _evaluate(lead: dict, suppressed: bool, msgs: dict[str, dict], drafts: dict[
     stop: str | None = None  # why later steps cannot happen yet; None while the chain is intact
     final = False  # True: the chain has ended for good (skipped), False: later steps just wait
     first_ts = prev_ts
+    prev_at = prev_ts  # when the previous follow-up went out (or is expected to)
     for idx, kind in enumerate(KINDS[: len(days)]):
         m, d = msgs.get(kind), drafts.get(kind)
-        due = first_ts + days[idx] * _DAY
+        # Cumulative days from the first email, but never less than a day after the previous follow-up (after downtime
+        # a long-overdue pair does not go out back to back).
+        due = first_ts + days[idx] * _DAY if idx == 0 else max(first_ts + days[idx] * _DAY, prev_at + _DAY)
+        prev_at = due
         n = idx + 1
         if stop is not None:
             steps.append(Step(kind, "skipped" if final else "waiting", stop, due))
             continue
         step: Step
         if m is not None and m["state"] == "sent":
-            steps.append(Step(kind, "sent", None, _ts(m) or due))
+            prev_at = _ts(m) or due
+            steps.append(Step(kind, "sent", None, prev_at))
             continue
         if m is not None:
             st = m["state"]
@@ -212,18 +217,19 @@ def _template(engine: Engine, cp: dict) -> dict | None:
 
 
 # ============================================================================ the tick
-def _create_draft(engine: Engine, cp: dict, lead: dict, kind: str, tpl: dict, original_subject: str | None, settings, profile: dict[str, str]) -> bool:
-    """Write the follow-up draft (approved unless the campaign requires approval). False when it cannot be written."""
+def _create_draft(engine: Engine, cp: dict, lead: dict, kind: str, tpl: dict, original_subject: str | None, settings, profile: dict[str, str]) -> str | None:
+    """Write the follow-up draft: approved, unless the campaign requires approval or a merge field is empty (then pending).
+    Returns the draft status, or None when it cannot be written."""
     try:
         r = composer.render({"subject": "-", "body": tpl[f"{kind}_body"]}, composer.lead_values(lead, settings, profile), "")
     except composer.TemplateError as e:
         with engine.begin() as c:
             _trace(c, lead.get("trace_id"), "followup", f"Follow-up not written: {e}", once=True)
-        return False
+        return None
     if not r.body.strip():
-        return False
+        return None
     flags = [flag("missing_field", "Empty merge fields: " + ", ".join(r.missing) + ".")] if r.missing else []
-    approve = not cp.get("followups_require_approval")
+    approve = not cp.get("followups_require_approval") and not r.missing  # an empty merge field needs a human look
     with engine.begin() as c:
         res = c.execute(text(
             "INSERT INTO drafts (campaign_id, lead_id, kind, subject, body, opener_source, flags_json, status, approved, approved_at) "
@@ -235,7 +241,7 @@ def _create_draft(engine: Engine, cp: dict, lead: dict, kind: str, tpl: dict, or
             _trace(c, lead.get("trace_id"), "followup", f"Wrote {kind.replace('_', ' ')} ({'approved automatically' if approve else 'waiting for your approval'})")
     if res.rowcount:
         event_types.publish("draft", event_types.DraftEvent(campaign_id=cp["id"], draft_id=None, action="generated"), engine)
-    return True
+    return "approved" if approve else "pending"
 
 
 def _release(engine: Engine, mid: int, chain: dict[str, dict], idx: int, due: float) -> None:
@@ -262,8 +268,8 @@ def _tick_campaign(engine: Engine, campaign_id: int, now: float) -> dict:
     with engine.connect() as c:
         cp, leads, msgs, drafts, sup = _load(c, campaign_id)
     days = _days(cp["followup_days_json"])
-    if not cp["followups_enabled"] or not days or cp["state"] not in _ACTIVE:
-        return out
+    if not cp["followups_enabled"] or not days:
+        return out  # (a paused campaign still gets held rows repaired; _evaluate emits no create/enqueue for it)
     tpl = _template(engine, cp)
     settings = db.load_settings(engine)
     profile = composer.profile_values(engine)
@@ -274,10 +280,11 @@ def _tick_campaign(engine: Engine, campaign_id: int, now: float) -> dict:
                 if s.action == "repair":
                     _release(engine, chain[s.kind]["id"], chain, idx, s.due_at)
                 elif s.action == "create" and tpl is not None:
-                    if not _create_draft(engine, cp, lead, s.kind, tpl, chain["initial"].get("subject"), settings, profile):
+                    made = _create_draft(engine, cp, lead, s.kind, tpl, chain["initial"].get("subject"), settings, profile)
+                    if made is None:
                         continue
                     out["drafts"] += 1
-                    if not cp.get("followups_require_approval") and _enqueue(engine, cp, lead, s.kind, chain, idx, s.due_at):
+                    if made == "approved" and _enqueue(engine, cp, lead, s.kind, chain, idx, s.due_at):
                         out["queued"] += 1
                 elif s.action == "enqueue" and _enqueue(engine, cp, lead, s.kind, chain, idx, s.due_at):
                     out["queued"] += 1
@@ -315,7 +322,7 @@ def tick(engine: Engine, now: float | None = None) -> dict:
     total = {"drafts": 0, "queued": 0, "reopened": 0}
     _cancel_disabled(engine)
     with engine.connect() as c:
-        ids = [r[0] for r in c.execute(text("SELECT id FROM campaigns WHERE followups_enabled=1 AND state IN ('running','done') ORDER BY id"))]
+        ids = [r[0] for r in c.execute(text("SELECT id FROM campaigns WHERE followups_enabled=1 AND state != 'draft' ORDER BY id"))]
     for cid in ids:
         try:
             r = _tick_campaign(engine, cid, now)
@@ -371,26 +378,34 @@ def skip(campaign_id: int, lead_id: int, kind: str, reason: str | None, engine: 
     if lead is None:
         raise FollowupNotFound("That person was not emailed in this campaign.")
     mid = 0
-    if m is not None:
-        mid, state = m
-        if state == "cancelled":
-            return
-        if state in ("sending", "sent", "needs_confirmation"):
-            raise FollowupConflict(f"This follow-up is already {state.replace('_', ' ')}, so it can no longer be skipped.")
-        if state == "queued":
-            outbox.cancel(mid, reason, engine)
-        else:  # failed: nothing reached the server, and the user gives up on it
+    email = lead[0].lower()
+    for _ in range(4):  # a tick may enqueue or the sender may claim between our read and our write: look again
+        if m is None:
             with engine.begin() as c:
-                c.execute(text("UPDATE messages SET state='cancelled', error=:e WHERE id=:i AND state='failed'"), {"e": reason, "i": mid})
+                res = c.execute(text(
+                    "INSERT OR IGNORE INTO messages (lead_id, campaign_id, kind, state, error, recipient_email, recipient_domain, trace_id) "
+                    "VALUES (:l, :c, :k, 'cancelled', :e, :em, :d, :t)"),
+                    {"l": lead_id, "c": campaign_id, "k": kind, "e": reason, "em": email, "d": domains.registrable(domains.split_email(email)[1]), "t": lead[1]})
+                if res.rowcount:
+                    mid = int(res.lastrowid)
+                    _trace(c, lead[1], "cancelled", f"{kind.replace('_', ' ').capitalize()} skipped: {reason}"[:200])
+                    break
+        else:
+            mid, state = m
+            if state == "cancelled":
+                return
+            if state in ("sending", "sent", "needs_confirmation"):
+                raise FollowupConflict(f"This follow-up is already {state.replace('_', ' ')}, so it can no longer be skipped.")
+            if state == "queued" and outbox.cancel(mid, reason, engine):
+                break
+            if state == "failed":  # nothing reached the server, and the user gives up on it
+                with engine.begin() as c:
+                    if c.execute(text("UPDATE messages SET state='cancelled', error=:e WHERE id=:i AND state='failed'"), {"e": reason, "i": mid}).rowcount:
+                        break
+        with engine.connect() as c:
+            m = c.execute(text("SELECT id, state FROM messages WHERE campaign_id=:c AND lead_id=:l AND kind=:k"), {"c": campaign_id, "l": lead_id, "k": kind}).first()
     else:
-        email = lead[0].lower()
-        with engine.begin() as c:
-            res = c.execute(text(
-                "INSERT OR IGNORE INTO messages (lead_id, campaign_id, kind, state, error, recipient_email, recipient_domain, trace_id) "
-                "VALUES (:l, :c, :k, 'cancelled', :e, :em, :d, :t)"),
-                {"l": lead_id, "c": campaign_id, "k": kind, "e": reason, "em": email, "d": domains.registrable(domains.split_email(email)[1]), "t": lead[1]})
-            mid = int(res.lastrowid) if res.rowcount else 0
-            _trace(c, lead[1], "cancelled", f"{kind.replace('_', ' ').capitalize()} skipped: {reason}"[:200])
+        raise FollowupConflict("This follow-up is changing right now; try again in a moment.")
     with engine.begin() as c:  # a follow-up waiting for approval leaves the review queue
         c.execute(text("UPDATE drafts SET status='rejected', approved=0, approved_at=NULL, updated_at=datetime('now') "
                        "WHERE campaign_id=:c AND lead_id=:l AND kind=:k AND status IN ('pending','needs_review')"), {"c": campaign_id, "l": lead_id, "k": kind})

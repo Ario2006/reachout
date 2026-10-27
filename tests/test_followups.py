@@ -560,3 +560,84 @@ def test_a_template_that_cannot_render_or_has_no_text_shows_a_reason_in_the_plan
     cid3, (d,), _ = fu_campaign(engine, svc, n=1, tpl=dict(followup_1_body="{{ '' }}"))
     go(svc, 4)
     assert "empty" in rows(engine, cid3, "followup_1")[0]["reason"]
+
+
+# ------------------------------------------------------------------ review round 2
+def test_skip_never_answers_ok_while_the_followup_can_still_go_out(world, monkeypatch):
+    engine, svc = world
+    cid, (a, b), snd = fu_campaign(engine, svc)
+    go(svc, 4)
+    followups.tick(engine)
+    real_cancel = outbox.cancel
+
+    def lost_race(mid, reason="", engine=None):  # the sender claimed it a moment before our cancel
+        with engine.begin() as c:
+            c.execute(text("UPDATE messages SET state='sending' WHERE id=:i"), {"i": mid})
+        return real_cancel(mid, reason, engine)
+
+    monkeypatch.setattr(followups.outbox, "cancel", lost_race)
+    with pytest.raises(followups.FollowupConflict):
+        followups.skip(cid, a, "followup_1", None, engine)
+    assert msg(engine, cid, a, "followup_1")["state"] == "sending"
+
+
+def test_skip_that_loses_the_insert_to_a_tick_cancels_the_queued_message(world, monkeypatch):
+    engine, svc = world
+    cid, (a,), snd = fu_campaign(engine, svc, n=1)
+    real = followups.domains.registrable
+
+    def tick_wins(host):  # runs between skip's read and its INSERT: the tick queues the follow-up
+        monkeypatch.setattr(followups.domains, "registrable", real)
+        go(svc, 4)
+        followups.tick(engine)
+        return real(host)
+
+    monkeypatch.setattr(followups.domains, "registrable", tick_wins)
+    followups.skip(cid, a, "followup_1", "not now", engine)
+    m = msg(engine, cid, a, "followup_1")
+    assert m["state"] == "cancelled" and m["error"] == "not now"
+    assert run_ticks(snd, svc, 3) == 0
+
+
+def test_a_draft_with_an_empty_merge_field_is_not_auto_approved(world):
+    engine, svc = world
+    cid, (a,), snd = fu_campaign(engine, svc, n=1, tpl=dict(followup_1_body="Hi {{first_name}}, about {{my_summary}}."))
+    go(svc, 4)
+    assert followups.tick(engine) == {"drafts": 1, "queued": 0, "reopened": 0}
+    with engine.connect() as c:
+        assert c.execute(text("SELECT status FROM drafts WHERE kind='followup_1'")).scalar() == "pending"
+    assert state_of(engine, cid, a, "followup_1") == "awaiting_approval"
+    assert run_ticks(snd, svc, 3) == 0
+
+
+def test_a_long_pause_never_produces_two_followups_within_a_day(world):
+    engine, svc = world
+    cid, (a,), snd = fu_campaign(engine, svc, n=1)
+    go(svc, 30)  # the app was off for a month: both follow-ups are long overdue
+    assert followups.tick(engine)["queued"] == 1
+    run_ticks(snd, svc, 3)
+    assert followups.tick(engine)["queued"] == 0  # follow-up 2 waits a day after follow-up 1
+    r2 = rows(engine, cid, "followup_2")[0]
+    f1 = msg(engine, cid, a, "followup_1")
+    assert r2["state"] == "waiting" and r2["due_at"] == pytest.approx(f1["claimed_at"] + DAY)
+    go(svc, 1)
+    assert followups.tick(engine)["queued"] == 1
+    run_ticks(snd, svc, 3)
+    f2 = msg(engine, cid, a, "followup_2")
+    assert f2["state"] == "sent" and f2["claimed_at"] - f1["claimed_at"] >= DAY
+
+
+def test_a_held_message_in_a_paused_campaign_is_repaired_not_stuck(world, monkeypatch):
+    engine, svc = world
+    cid, (a,), snd = fu_campaign(engine, svc, n=1)
+    first = msg(engine, cid, a)
+    go(svc, 4)
+    monkeypatch.setattr(followups, "_release", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("crash")))
+    followups.tick(engine)
+    monkeypatch.undo()
+    campaigns.pause(cid, "user", None, engine)
+    followups.tick(engine)
+    m = msg(engine, cid, a, "followup_1")
+    assert m["state"] == "queued" and m["in_reply_to"] == first["message_id"] and m["not_before"] < 1e14
+    campaigns.resume(cid, engine)
+    assert run_ticks(snd, svc, 3) == 1
