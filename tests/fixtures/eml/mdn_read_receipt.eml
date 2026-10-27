@@ -1,0 +1,21 @@
+From: Dev <dev@interest.test>
+To: Aryan Kumar <aryan.reachout@gmail.com>
+Subject: Read: Internship at Interest
+Date: Tue, 27 Oct 2026 10:05:00 +0000
+Message-ID: <mdn-1@interest.test>
+In-Reply-To: <sent-interest-1@reachout.test>
+MIME-Version: 1.0
+Content-Type: multipart/report; report-type=disposition-notification; boundary="b"
+
+--b
+Content-Type: text/plain
+
+Your message was displayed.
+
+--b
+Content-Type: message/disposition-notification
+
+Final-Recipient: rfc822; dev@interest.test
+Disposition: manual-action/MDN-sent-manually; displayed
+
+--b--
