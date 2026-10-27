@@ -1,0 +1,13 @@
+From: MAILER-DAEMON@mx.pm.test (Mail Delivery System)
+To: Aryan Kumar <aryan.reachout@gmail.com>
+Subject: Undelivered Mail Returned to Sender
+Date: Tue, 27 Oct 2026 10:05:00 +0000
+Message-ID: <dsn-pm-1@mx.pm.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+This is the mail system at host mx.pm.test.
+
+I'm sorry to have to inform you that your message could not be delivered to one or more recipients.
+
+<hr@pm.test>: host mail.pm.test said: 550 5.1.1 <hr@pm.test>: Recipient address rejected: User unknown in virtual mailbox table (in reply to RCPT TO command)

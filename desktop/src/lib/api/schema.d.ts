@@ -367,7 +367,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Bulk Approve */
+        /**
+         * Bulk Approve
+         * @description Pending drafts only; `needs_review` drafts need an explicit single approve.
+         */
         post: operations["bulk_approve_drafts_bulk_approve_post"];
         delete?: never;
         options?: never;
@@ -501,7 +504,8 @@ export interface paths {
         put?: never;
         /**
          * Check Now
-         * @description Starts the `inbox_check` job (the same code the 10-minute poller runs).
+         * @description Starts the `inbox_check` job (the same code the poller runs). A check that is already queued or running is
+         *     returned instead of starting a second one.
          */
         post: operations["check_now_inbox_check_now_post"];
         delete?: never;
@@ -1307,6 +1311,11 @@ export interface components {
         BulkApproveOut: {
             /** Approved */
             approved: number;
+            /**
+             * Skipped Blocked
+             * @default 0
+             */
+            skipped_blocked: number;
             /** Skipped Flagged */
             skipped_flagged: number;
         };
@@ -3403,20 +3412,18 @@ export interface operations {
         parameters: {
             query: {
                 campaign_id: number;
+                status?: ("pending" | "needs_review" | "approved" | "rejected")[] | null;
                 flagged?: boolean | null;
                 q?: string;
                 offset?: number;
                 limit?: number;
+                kind?: ("initial" | "followup_1" | "followup_2") | null;
             };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": ("pending" | "needs_review" | "approved" | "rejected")[] | null;
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
