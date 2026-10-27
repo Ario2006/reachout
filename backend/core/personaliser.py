@@ -53,11 +53,18 @@ about after also been being could does from have into just like more most only o
 then there these they this those very what when where which while with would your yours really
 """.split())
 
-_NUMBER_WORDS = re.compile(r"\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|"
-                           r"hundred|hundreds|thousand|thousands|million|millions|billion|dozens?)\b", re.I)
+_NUMBER_WORD_LIST = (
+    "zero two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen "
+    "nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred hundreds thousand thousands million millions "
+    "billion billions trillion dozen dozens half halves double doubled triple tripled twice thrice quadruple percent "
+    "percentage").split()
+# "one" is left out on purpose: "one of the" is ordinary prose; "one million" is caught by "million".
+_NUMBER_WORDS = re.compile(r"\b(?:" + "|".join(_NUMBER_WORD_LIST) + r"|per\s+cent)\b|%", re.I)
 _DIGITS = re.compile(r"\d+")
-_URLISH = re.compile(r"(?i)https?://\S+|www\.\S+|[\w.+-]+@[\w-]+\.\w+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|io|ai|co|dev|app|"
-                     r"in|uk|us|edu|gov|tech|xyz|me|so|sh|ly)\b")
+# Anything shaped like a link or address: scheme, www., an email, or a dotted name ending in a 2+ letter label
+# (any TLD, optional path).
+_URLISH = re.compile(r"(?i)https?://\S+|www\.\S+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|"
+                     r"\b[a-z0-9][\w-]*(?:\.[\w-]+)*\.[a-z]{2,}\b(?:/\S*)?")
 _CAPS = re.compile(r"\b[A-Z][A-Za-z0-9]*")
 _SENTENCE_END = re.compile(r"[.!?]+(?:\s|$)")
 
@@ -117,13 +124,15 @@ def check_opener(opener: str, snippet: str) -> Check:
     for d in dict.fromkeys(_DIGITS.findall(text)):
         if d not in snip_digits:
             res.add("unsupported_fact", f"The number {d} is not in the source text.")
-    for m in dict.fromkeys(_NUMBER_WORDS.findall(text)):
-        if m.lower() not in snip_l:
+    snip_words = set(re.findall(r"[a-z0-9]+", snip_l))
+    snip_flat = re.sub(r"\s+", " ", snip_l)
+    for m in dict.fromkeys(w.lower() for w in _NUMBER_WORDS.findall(text)):
+        m = re.sub(r"\s+", " ", m)
+        if (m == "%" and "%" not in snip) or (m != "%" and m not in snip_words and m not in snip_flat):
             res.add("unsupported_fact", f"“{m}” is not in the source text.")
     for u in dict.fromkeys(_URLISH.findall(text)):
-        if u.lower().rstrip(".,;:!?)") not in snip_l:
+        if u.lower().rstrip(".,;:!?)\"'") not in snip_l:
             res.add("unsupported_fact", f"The link or address {u} is not in the source text.")
-    snip_words = set(re.findall(r"[a-z0-9]+", snip_l))
     for cap in dict.fromkeys(_CAPS.findall(text)):
         c = cap.lower()
         if c in COMMON_CAPS or c in snip_words:

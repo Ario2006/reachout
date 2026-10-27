@@ -1,6 +1,5 @@
 """Opener guardrails: unit cases plus a property test that an accepted opener invents nothing."""
 import json
-import re
 from pathlib import Path
 
 from hypothesis import event, given, settings, target
@@ -31,6 +30,22 @@ def test_each_guardrail_rejects():
     assert "unsupported_fact" in codes("Acme builds developer tools and Priya Shah leads it.")
     assert "unsupported_fact" in codes("Acme builds developer tools for three million teams.")
     assert "unsupported_fact" in codes("Lovely weather today in your part of the world.")  # nothing from the snippet
+
+
+REVIEW_SNIP = "Acme raised funding and launched a new analytics dashboard for logistics teams in Berlin."
+
+
+def test_invented_word_numbers_percentages_and_odd_domains_are_rejected():
+    for opener in ("Saw the new dashboard; ninety teams use it.",
+                   "Saw the new analytics dashboard, sixty percent faster.",
+                   "Saw the new analytics dashboard at acme.company/x.",
+                   "Saw the new analytics dashboard, 60% faster.",
+                   "Saw the new analytics dashboard, twice as fast.",
+                   "Saw the new analytics dashboard at shop.acme.museum."):
+        assert "unsupported_fact" in codes(opener, REVIEW_SNIP), opener
+    assert p.check_opener("Saw the new analytics dashboard for logistics teams.", REVIEW_SNIP).ok
+    # allowed once the snippet itself says it
+    assert p.check_opener("Saw the new analytics dashboard, sixty percent faster.", REVIEW_SNIP + " It is sixty percent faster.").ok
 
 
 def test_numbers_and_names_allowed_only_when_in_snippet():
@@ -99,25 +114,67 @@ def test_regenerate_rejects_repeat_of_previous():
 
 
 # --------------------------------------------------------------------------- property
+# The oracle below is written independently of the module's regexes: it tokenises on whitespace and applies plain rules.
+NUM_WORDS = {"two", "three", "ten", "twenty", "sixty", "ninety", "hundred", "million", "half", "twice", "double", "percent"}
 SNIPPET_WORDS = ["Acme", "builds", "developer", "tools", "for", "small", "teams", "in", "2021", "Berlin", "Priya", "CLI",
-                 "raised", "seed", "round", "https://acme.io", "and", "ships", "weekly"]
-OPENER_WORDS = SNIPPET_WORDS + ["Zorblax", "Initech", "500", "3.5", "https://evil.example", "ceo@x.io", "x.com",
-                                "million", "Congrats", "I", "love", "the", "Maria", "2019", "great", "work"]
+                 "raised", "seed", "round", "https://acme.io", "acme.company/x", "and", "ships", "weekly", "sixty", "percent"]
+OPENER_WORDS = SNIPPET_WORDS + ["Zorblax", "Initech", "500", "3.5", "https://evil.example", "ceo@x.io", "x.com", "million", "Congrats",
+                                "I", "love", "the", "Maria", "2019", "great", "work", "ninety", "twenty-five", "60%", "twice", "half",
+                                "shop.acme.museum", "a.b.travel/path", "foo.xyz", "Saw", "dashboards"]
+domains = st.builds(lambda a, b, c: f"{a}.{b}" + c, st.text("abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=6),
+                    st.text("abcdefghijklmnopqrstuvwxyz", min_size=2, max_size=9), st.sampled_from(["", "/x", "/a/b"]))
+words = st.one_of(st.sampled_from(OPENER_WORDS), domains)
 
 
-@settings(max_examples=400, deadline=None)
-@given(snip=st.lists(st.sampled_from(SNIPPET_WORDS), min_size=3, max_size=14).map(" ".join),
-       op=st.lists(st.sampled_from(OPENER_WORDS), min_size=1, max_size=40).map(" ".join))
+def oracle_violations(opener: str, snippet: str) -> list[str]:
+    snip_low = snippet.lower()
+    snip_runs = set("".join(ch if ch.isalnum() else " " for ch in snip_low).split())  # words, even inside a domain
+    bad = []
+    for raw in opener.split():
+        tok = raw.strip(".,;:!?()\"'")
+        low = tok.lower()
+        if any(ch.isdigit() for ch in tok):
+            digits, cur = [], ""
+            for ch in tok + " ":
+                if ch.isdigit():
+                    cur += ch
+                elif cur:
+                    digits.append(cur)
+                    cur = ""
+            snip_digits, cur = [], ""
+            for ch in snippet + " ":
+                if ch.isdigit():
+                    cur += ch
+                elif cur:
+                    snip_digits.append(cur)
+                    cur = ""
+            bad += [f"number {d}" for d in digits if d not in snip_digits]
+        if "%" in tok and "%" not in snippet:
+            bad.append("percent sign")
+        for w in set(low.replace("-", " ").split()) & NUM_WORDS - snip_runs:
+            bad.append(f"number word {w}")
+        dotted = "." in tok.strip(".") and any(c.isalpha() for c in tok.split(".")[-1].split("/")[0]) and len(tok.split(".")[-1].split("/")[0]) >= 2
+        if low.startswith(("http://", "https://", "www.")) or "@" in tok or dotted:
+            if low not in snip_low:
+                bad.append(f"link {tok}")
+        if tok[:1].isupper() and tok.isalnum() and low not in p.COMMON_CAPS and low not in snip_runs:
+            bad.append(f"name {tok}")
+    return bad
+
+
+@settings(max_examples=600, deadline=None)
+@given(snip=st.lists(words, min_size=3, max_size=14).map(" ".join), op=st.lists(words, min_size=1, max_size=40).map(" ".join))
 def test_accepted_opener_invents_no_number_url_or_name(snip, op):
-    target(float(p.check_opener(op, snip).ok))
-    if not p.check_opener(op, snip).ok:
+    ok = p.check_opener(op, snip).ok
+    target(float(ok))
+    if not ok:
         return
     event("accepted")
-    low = snip.lower()
-    for d in re.findall(r"\d+", op):
-        assert d in re.findall(r"\d+", snip)
-    for u in re.findall(r"https?://\S+|\S+@\S+|\b\w+\.(?:com|io|example)\b", op):
-        assert u.lower() in low
-    for cap in re.findall(r"\b[A-Z][A-Za-z0-9]*", op):
-        assert cap.lower() in low or cap.lower() in p.COMMON_CAPS
+    assert oracle_violations(op, snip) == []
     assert len(op.split()) <= p.MAX_WORDS
+
+
+def test_the_oracle_itself_catches_what_it_should():
+    assert oracle_violations("ninety teams at acme.company/x", REVIEW_SNIP)
+    assert oracle_violations("Zorblax is 60% bigger in 2030", REVIEW_SNIP)
+    assert not oracle_violations("Saw the analytics dashboard in Berlin", REVIEW_SNIP)

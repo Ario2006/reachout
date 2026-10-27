@@ -31,6 +31,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [overrides, setOverrides] = useState<Record<number, DraftStatus>>({})
   const [confirmBulk, setConfirmBulk] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const status = TABS.find((t) => t.id === tab)?.status ?? []
   const drafts = useDrafts({ campaignId: campaign.id, status, q })
   const patch = usePatchDraft()
@@ -51,6 +52,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
   const firstOpen = items.find((d) => OPEN.has(effective(d)))
   const selected = items.find((d) => d.id === selectedId) ?? firstOpen ?? items[0] ?? null
   const selIndex = selected ? items.indexOf(selected) : -1
+  const editing = selected !== null && editingId === selected.id
 
   // Keep the keyboard-selected row in view.
   const listRef = useRef<HTMLUListElement>(null)
@@ -87,7 +89,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
   }, [items, selIndex])
 
   useReviewKeys({
-    enabled: selected !== null,
+    enabled: selected !== null && !editing, // never approve, reject or move while the text is being edited
     onApprove: () => { if (selected && effective(selected) !== 'approved') decide(selected, 'approved') },
     onReject: () => { if (selected && effective(selected) !== 'rejected') decide(selected, 'rejected') },
     onNext: () => move(1),
@@ -167,11 +169,14 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
           </ul>
           <div className="flex min-h-0 flex-col border-l">
             {selected ? (
-              <DraftDetail key={selected.id} item={selected} status={effective(selected)} onApprove={() => decide(selected, 'approved')} onReject={() => decide(selected, 'rejected')} />
+              <DraftDetail key={selected.id} item={selected} status={effective(selected)} editing={editing} onEditingChange={(e) => setEditingId(e ? selected.id : null)} onApprove={() => decide(selected, 'approved')} onReject={() => decide(selected, 'rejected')} />
             ) : null}
           </div>
         </div>
       )}
+      {items.some((d) => d.flags.some((f) => f.code === 'missing_field')) ? (
+        <p className="text-xs text-amber-600" role="status" data-testid="missing-hint">Some drafts have empty merge fields. Fill your profile fields on the Profile tab, then rewrite those drafts.</p>
+      ) : null}
       <p className="text-muted-foreground text-xs">Keyboard: <kbd>A</kbd> approve, <kbd>R</kbd> reject, <kbd>J</kbd> next, <kbd>K</kbd> previous. Nothing is sent until you start a campaign.</p>
 
       <Dialog open={confirmBulk} onOpenChange={setConfirmBulk}>

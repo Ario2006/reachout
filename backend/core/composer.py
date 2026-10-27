@@ -119,7 +119,7 @@ def render(template: dict, values: dict[str, str], opener: str) -> Rendered:
     try:
         subject = _env.from_string(template["subject"]).render(**{**ctx, "custom_opener": opener})
         body = _env.from_string(template["body"]).render(**{**ctx, "custom_opener": OPEN + opener + CLOSE})
-    except jinja2.TemplateError as e:
+    except Exception as e:  # noqa: BLE001 - user templates can raise anything (1/0, bad filter arguments, ...)
         raise TemplateError(f"The template could not be rendered: {e}") from e
     subject = re.sub(r"\s+", " ", subject).strip()
     body = re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+\n", "\n", body)).strip()

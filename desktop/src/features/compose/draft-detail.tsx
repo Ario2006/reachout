@@ -15,17 +15,18 @@ import { HighlightedText } from './highlighted-text'
 interface Props {
   item: DraftItem
   status: DraftStatus
+  editing: boolean
+  onEditingChange: (editing: boolean) => void
   onApprove: () => void
   onReject: () => void
 }
 
 const kbd = 'bg-muted text-muted-foreground ml-1 rounded border px-1 font-mono text-[10px]'
 
-export function DraftDetail({ item, status, onApprove, onReject }: Props) {
+export function DraftDetail({ item, status, editing, onEditingChange, onApprove, onReject }: Props) {
   const detail = useDraft(item.id)
   const patch = usePatchDraft()
   const regen = useRegenerateOpener()
-  const [editing, setEditing] = useState(false)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [showSent, setShowSent] = useState(false)
@@ -36,12 +37,12 @@ export function DraftDetail({ item, status, onApprove, onReject }: Props) {
   function startEdit() {
     setSubject(d.subject)
     setBody(d.body)
-    setEditing(true)
+    onEditingChange(true)
   }
   async function save() {
     try {
       await patch.mutateAsync({ id: d.id, patch: { subject, body } })
-      setEditing(false)
+      onEditingChange(false)
     } catch { /* shown inline from patch.error */ }
   }
 
@@ -70,13 +71,13 @@ export function DraftDetail({ item, status, onApprove, onReject }: Props) {
         <div className="space-y-2">
           <Input aria-label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={200} />
           <Textarea aria-label="Email body" value={body} onChange={(e) => setBody(e.target.value)} rows={12} className="font-mono text-sm"
-            onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void save() }} />
+            onKeyDown={(e) => { if (e.key === 'Escape') onEditingChange(false); if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void save() }} />
           {status === 'approved' ? <p className="text-muted-foreground text-xs">This draft is approved. Saving a change withdraws the approval; approve it again afterwards.</p> : null}
           <div className="flex gap-2">
             <Button size="sm" onClick={() => void save()} disabled={patch.isPending || !subject.trim() || !body.trim()}>
               {patch.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null} Save changes
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => onEditingChange(false)}>Cancel</Button>
           </div>
         </div>
       ) : (

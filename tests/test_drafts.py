@@ -271,3 +271,47 @@ def test_regenerate_after_opener_was_edited_away_rebuilds_from_template(client, 
     fake_services.fake_llm.responses = [OpenerOut(opener="Your developer tools for teams look useful.")]
     r = client.post(f"/drafts/{d['id']}/regenerate-opener").json()
     assert r["body"].startswith("Hi ") and r["opener_source"] == "llm" and "edited" not in [x["code"] for x in r["flags"]]
+
+
+def test_patch_validation_strips_and_rejects_bad_text(client, engine, camp):
+    d = make(client, engine, camp, 1)["items"][0]
+    for bad in ({"subject": "   "}, {"subject": "Two\nlines"}, {"subject": "Tab\there"}, {"body": " \n "}, {"body": "nul\x00byte"}):
+        assert client.patch(f"/drafts/{d['id']}", json=bad).status_code == 422, bad
+    r = client.patch(f"/drafts/{d['id']}", json={"subject": "  Padded  ", "body": "\n Body with\nnewlines \n"}).json()
+    assert r["subject"] == "Padded" and r["body"] == "Body with\nnewlines"
+
+
+def test_back_to_pending_keeps_a_fallback_opener_behind_the_review_gate(client, engine, camp, fake_services):
+    leads(engine, 1)
+    fake_services.fake_llm.responses = [BAD]
+    run(engine, camp)
+    d = client.get("/drafts", params={"campaign_id": camp}).json()["items"][0]
+    assert d["status"] == "needs_review"
+    assert client.patch(f"/drafts/{d['id']}", json={"status": "approved"}).json()["status"] == "approved"
+    # un-approve explicitly, and via an edit that withdraws approval: both land on needs_review, not pending
+    assert client.patch(f"/drafts/{d['id']}", json={"status": "pending"}).json()["status"] == "needs_review"
+    client.patch(f"/drafts/{d['id']}", json={"status": "approved"})
+    assert client.patch(f"/drafts/{d['id']}", json={"body": d["body"] + " Thanks again."}).json()["status"] == "needs_review"
+    client.patch(f"/drafts/{d['id']}", json={"status": "rejected"})
+    assert client.patch(f"/drafts/{d['id']}", json={"status": "pending"}).json()["status"] == "needs_review"
+    r = client.post("/drafts/bulk-approve", json={"campaign_id": camp, "only_unflagged": False}).json()
+    assert r["approved"] == 0
+    # no_context fallbacks are not a failure and keep the ordinary pending status
+    ls = leads(engine, 1, context_snippet=None)
+    run(engine, camp, lead_ids=ls)
+    nc = [x for x in client.get("/drafts", params={"campaign_id": camp}).json()["items"] if x["lead"]["id"] == ls[0]][0]
+    client.patch(f"/drafts/{nc['id']}", json={"status": "approved"})
+    assert client.patch(f"/drafts/{nc['id']}", json={"status": "pending"}).json()["status"] == "pending"
+
+
+def test_one_lead_with_a_template_error_does_not_fail_the_job(engine):
+    cid = f.campaign(engine, template_id=f.template(engine, body="Hi {{first_name}} {{ 10 // (company | length) }}\n\n{{custom_opener}}"))
+    good = f.lead(engine, company="Acme")
+    bad = f.lead(engine, company="")
+    job = run(engine, cid)
+    assert job["state"] == "succeeded" and job["result"] == {"generated": 1, "needs_review": 0, "skipped": 1}
+    assert [d["lead_id"] for d in rows(engine, cid)] == [good] and lead_status(engine, bad) == "new"
+    # every lead failing is a job failure with the reason, not a silent "0 drafts"
+    cid2 = f.campaign(engine, template_id=f.template(engine, body="{{ 1 / 0 }}"))
+    job = run(engine, cid2)
+    assert job["state"] == "failed" and "could not be rendered" in job["error"]

@@ -122,6 +122,28 @@ describe('DraftsPanel', () => {
     expect(patches(calls)[0]?.body).toEqual({ subject: 'Hello 1', body: 'New text' })
   })
 
+  it('A, R, J and K do nothing while a draft is being edited, even with focus outside the text box', async () => {
+    const user = userEvent.setup()
+    const { routes } = backend([draft(1), draft(2)])
+    const { calls } = mockApi(routes)
+    renderWithProviders(<DraftsPanel campaign={CAMPAIGN} />)
+    await user.click(await screen.findByRole('button', { name: /Edit/ }))
+    await user.click(screen.getByRole('heading')) // focus leaves the text box
+    expect(screen.getByLabelText('Email body')).not.toHaveFocus()
+    await user.keyboard('arjk')
+    expect(patches(calls)).toHaveLength(0)
+    expect(screen.getByRole('heading')).toHaveTextContent('Person 1')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.keyboard('a')
+    await waitFor(() => expect(patches(calls)).toHaveLength(1))
+  })
+
+  it('hints at the profile fields when drafts have empty merge fields', async () => {
+    mockApi(backend([draft(1, { flags: [{ code: 'missing_field', message: 'Empty merge fields: my_pitch.' }] })]).routes)
+    renderWithProviders(<DraftsPanel campaign={CAMPAIGN} />)
+    expect(await screen.findByTestId('missing-hint')).toHaveTextContent('Fill your profile fields')
+  })
+
   it('bulk approve asks first, then calls the API with only_unflagged', async () => {
     const user = userEvent.setup()
     const { routes } = backend([draft(1), draft(2, { flags: [{ code: 'no_context', message: 'x' }] })])

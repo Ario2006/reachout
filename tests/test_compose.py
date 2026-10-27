@@ -105,3 +105,11 @@ def test_blank_first_name_uses_there_and_blank_lines_collapse():
     r = composer.render(t, {"first_name": "", "my_pitch": ""}, "Opener here.")
     assert r.subject == "Hi there" and "\n\n\n" not in r.body and r.missing == ["my_pitch"]
     assert r.body[r.opener_span[0]:r.opener_span[1]] == "Opener here."
+
+
+def test_any_exception_in_a_template_becomes_a_template_error_and_a_422(client):
+    for body in ("{{ 1 / 0 }}", "{{ 'a' + 1 }}", "{{ range(3) + 1 }}"):
+        with pytest.raises(composer.TemplateError):
+            composer.render(dict(subject="s", body=body), {"first_name": "A"}, "o")
+    r = client.post("/templates/preview", json={"template": tpl(body="Hi {{ 1 / 0 }} {{custom_opener}}")})
+    assert r.status_code == 422 and "could not be rendered" in r.json()["detail"]

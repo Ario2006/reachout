@@ -131,15 +131,23 @@ def run_generate_drafts(ctx: JobContext, payload: dict) -> dict:
     leads, skipped = _candidates(engine, campaign, template, payload.get("lead_ids"), bool(payload.get("regenerate")))
     total = len(leads)
     generated = review = 0
+    errors: list[str] = []
     ctx.progress(0, total, f"Writing {total} draft{'s' if total != 1 else ''}", force=True)
     for i, lead in enumerate(leads):
         ctx.raise_if_cancelled()
         ctx.progress(i, total, f"Writing draft {i + 1} of {total}")
-        d = build(template, lead, settings, profile, personaliser.make_opener(lead, engine=engine))
+        try:
+            d = build(template, lead, settings, profile, personaliser.make_opener(lead, engine=engine))
+        except composer.TemplateError as e:  # one lead's template trouble must not sink the whole job
+            errors.append(str(e))
+            skipped += 1
+            continue
         draft_id = _save(engine, cid, lead["id"], d)
         generated += 1
         review += d["status"] == "needs_review"
         _emit(engine, cid, draft_id, "generated")
+    if errors and generated == 0:
+        raise ValueError(errors[0])
     msg = f"{generated} draft{'s' if generated != 1 else ''} written"
     if review:
         msg += f", {review} need review"
@@ -262,6 +270,12 @@ def patch_draft(draft_id: int, patch: dict, engine: Engine) -> dict:
                 raise DraftConflict("A draft that needs review stays in review until you approve or reject it.")
             c.execute(text("UPDATE drafts SET status = 'pending', approved = 0, approved_at = NULL, "
                            "updated_at = datetime('now') WHERE id = :i"), {"i": draft_id})
+        # A fallback opener must stay behind the review gate however the draft got back to pending
+        # (explicit un-approve, reject then pending, or an edit that withdrew approval).
+        c.execute(text(
+            "UPDATE drafts SET status = 'needs_review' WHERE id = :i AND status = 'pending' AND opener_source = 'fallback' "
+            "AND NOT EXISTS (SELECT 1 FROM json_each(drafts.flags_json) WHERE json_extract(value, '$.code') = 'no_context')"),
+            {"i": draft_id})
         _sync_lead_status(c, d["lead_id"])
     _emit(engine, d["campaign_id"], draft_id, action)
     return get_draft(draft_id, engine)  # type: ignore[return-value]
@@ -314,7 +328,10 @@ def regenerate_opener(draft_id: int, engine: Engine) -> dict:
         if tpl is None:
             raise DraftConflict("The opener was edited by hand and this campaign has no template to rebuild it from.")
         values = composer.lead_values(lead, db.load_settings(engine), composer.profile_values(engine))
-        rendered = composer.render(tpl, values, op.text)
+        try:
+            rendered = composer.render(tpl, values, op.text)
+        except composer.TemplateError as e:
+            raise DraftConflict(str(e)) from e
         subject, body = rendered.subject, rendered.body
         flags = [f for f in flags if f["code"] != "edited"]
     want = "needs_review" if op.source == "fallback" and not op.no_context else "pending"
