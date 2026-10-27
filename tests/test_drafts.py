@@ -315,3 +315,14 @@ def test_one_lead_with_a_template_error_does_not_fail_the_job(engine):
     cid2 = f.campaign(engine, template_id=f.template(engine, body="{{ 1 / 0 }}"))
     job = run(engine, cid2)
     assert job["state"] == "failed" and "could not be rendered" in job["error"]
+
+
+def test_bulk_approve_leaves_follow_up_drafts_alone_unless_asked(engine):
+    from backend.core import drafts as d
+    from tests import factories as f
+    cid, lid = f.campaign(engine), f.lead(engine)
+    f.draft(engine, cid, lid, "pending")
+    f.draft(engine, cid, lid, "pending", kind="followup_1")
+    assert d.bulk_approve(cid, None, True, engine)["approved"] == 1
+    assert d.bulk_approve(cid, None, True, engine)["approved"] == 0
+    assert d.bulk_approve(cid, None, True, engine, kinds=["followup_1", "followup_2"])["approved"] == 1

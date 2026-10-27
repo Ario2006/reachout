@@ -154,6 +154,7 @@ class BulkApproveIn(BaseModel):
     campaign_id: int
     draft_ids: list[int] | None = None  # None = all pending drafts of the campaign
     only_unflagged: bool = True
+    kinds: list[DraftKind] = Field(default_factory=lambda: ['initial'])  # follow-up drafts are only approved when asked for
 
 
 class BulkApproveOut(BaseModel):

@@ -107,7 +107,7 @@ def list_drafts(engine: EngineDep, campaign_id: int, status: Annotated[list[Draf
 @router.post("/drafts/bulk-approve", response_model=BulkApproveOut)
 def bulk_approve(body: BulkApproveIn, engine: EngineDep) -> dict:
     """Pending drafts only; `needs_review` drafts need an explicit single approve."""
-    return drafts.bulk_approve(body.campaign_id, body.draft_ids, body.only_unflagged, engine)
+    return drafts.bulk_approve(body.campaign_id, body.draft_ids, body.only_unflagged, engine, kinds=body.kinds)
 
 
 @router.get("/drafts/{draft_id}", response_model=DraftDetail)

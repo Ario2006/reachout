@@ -281,13 +281,17 @@ def patch_draft(draft_id: int, patch: dict, engine: Engine) -> dict:
     return get_draft(draft_id, engine)  # type: ignore[return-value]
 
 
-def bulk_approve(campaign_id: int, draft_ids: Iterable[int] | None, only_unflagged: bool, engine: Engine) -> dict:
+def bulk_approve(campaign_id: int, draft_ids: Iterable[int] | None, only_unflagged: bool, engine: Engine,
+                 kinds: Iterable[str] = ("initial",)) -> dict:
     """Approve pending drafts. needs_review drafts are never touched here, whatever the arguments."""
     ids = None if draft_ids is None else set(draft_ids)
     with engine.begin() as c:
         rows = c.execute(text(
             "SELECT d.id, d.lead_id, json_array_length(d.flags_json) FROM drafts d "
             "WHERE d.campaign_id = :c AND d.status = 'pending' ORDER BY d.id"), {"c": campaign_id}).all()
+        wanted = set(kinds)
+        kind_of = {r[0]: r[1] for r in c.execute(text("SELECT id, kind FROM drafts WHERE campaign_id = :c"), {"c": campaign_id})}
+        rows = [r for r in rows if kind_of.get(r[0]) in wanted]
         target, flagged, blocked = [], 0, 0
         for did, lid, nflags in rows:
             if ids is not None and did not in ids:

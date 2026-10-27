@@ -155,7 +155,7 @@ describe('DraftsPanel', () => {
     expect(dialog).toHaveTextContent('1 draft without flags')
     expect(calls.some((c) => c.path === '/drafts/bulk-approve')).toBe(false)
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }))
-    await waitFor(() => expect(calls.find((c) => c.path === '/drafts/bulk-approve')?.body).toEqual({ campaign_id: 1, only_unflagged: true }))
+    await waitFor(() => expect(calls.find((c) => c.path === '/drafts/bulk-approve')?.body).toEqual({ campaign_id: 1, only_unflagged: true, kinds: ['initial'] }))
   })
 
   it('shows a skeleton, then an empty state with guidance', async () => {

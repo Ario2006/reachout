@@ -138,7 +138,8 @@ export function useRegenerateOpener() {
 export function useBulkApprove() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (campaignId: number) => api.post('/drafts/bulk-approve', { body: { campaign_id: campaignId, only_unflagged: true } }),
+    mutationFn: (v: { campaignId: number; kinds: Array<'initial' | 'followup_1' | 'followup_2'> }) =>
+      api.post('/drafts/bulk-approve', { body: { campaign_id: v.campaignId, only_unflagged: true, kinds: v.kinds } }),
     onSettled: () => void qc.invalidateQueries({ queryKey: K.drafts }),
   })
 }

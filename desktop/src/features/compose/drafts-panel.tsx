@@ -106,7 +106,7 @@ export function DraftsPanel({ campaign }: { campaign: Campaign }) {
   const complete = (drafts.data?.total ?? 0) <= items.length
   async function approveAll() {
     try {
-      const r = await bulk.mutateAsync(campaign.id)
+      const r = await bulk.mutateAsync({ campaignId: campaign.id, kinds: kind === 'followups' ? ['followup_1', 'followup_2'] : ['initial'] })
       toast.success(`${pluralize(r.approved, 'draft')} approved${r.skipped_flagged ? `, ${r.skipped_flagged} flagged left for you` : ''}`)
     } catch (e) {
       toast.error(e instanceof ApiError ? e.detail : 'Approving failed')

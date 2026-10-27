@@ -1301,6 +1301,8 @@ export interface components {
             campaign_id: number;
             /** Draft Ids */
             draft_ids?: number[] | null;
+            /** Kinds */
+            kinds?: ("initial" | "followup_1" | "followup_2")[];
             /**
              * Only Unflagged
              * @default true

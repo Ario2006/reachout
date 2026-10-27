@@ -322,6 +322,18 @@
             ],
             "title": "Draft Ids"
           },
+          "kinds": {
+            "items": {
+              "enum": [
+                "initial",
+                "followup_1",
+                "followup_2"
+              ],
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
           "only_unflagged": {
             "default": true,
             "title": "Only Unflagged",
