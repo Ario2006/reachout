@@ -18,10 +18,13 @@ Run on the M3 / 8 GB Mac, 2026-10-28. "Fakes" means the in-memory mailer, IMAP, 
 | Backend peak RSS < 1.5 GB | PASS | crawl 299 MB peak; idle API + worker 143 MB |
 | Leads table smooth at 5,000 rows | PASS (DOM/render level) | Playwright: 5,003 rows render as a window; vitest: 26 DOM rows, 1 row re-renders per selection. No FPS measurement. |
 | Draft review: 50 approvals by keyboard | PASS | vitest |
-| Playwright smoke, lifecycle, pipeline | PASS (21 passed, 1 live spec skipped by design) | smoke 8/8 after updating the stale sidebar assertion |
+| Playwright smoke, lifecycle, pipeline | PASS (20 passed, 1 live spec skipped by design) | final run; one timing-sensitive 5,003-row check failed once under machine load (p95 35 ms vs 34), 24 ms when re-run |
 | >= 90% line coverage on safety/sending/tracking/extraction modules | PASS | outbox 96.7, tz 92.6, footer 100, sender 95.7, mailer 91.7, personaliser 99.1, tracker 94.0, inbox_poller 97.1, followups 96.6, extractor 94.1, heuristics 95.1, validator 100 (total backend 94.3) |
 | >= 30 leads from "AI/ML internship openings in Bangalore" | Not re-run | needs live web and Ollama; last measured in `docs/m2-yields.md` |
-| Memory with a 3B model loaded < 6 GB; idle Electron + backend + worker < 600 MB | Not measured | Electron/Ollama not launched in this pass |
+| Idle Electron + backend + worker < 600 MB | PASS | about 258 MB (packaged app, 30 s after launch) |
+| Memory with a 3B model loaded < 6 GB | Not measured | Ollama not launched in this pass |
+| Packaged unsigned .app/.dmg (arm64) launches, 7 screens, /health 200 via bundled backend, quit leaves no children | PASS | `scripts/build-mac.sh`; .app 428 MB, .dmg 176 MB; idle Electron + api + worker about 258 MB |
+| Backend lint | PASS | ruff, correctness rules (`ruff.toml`), part of `test-all.sh` |
 | Real SMTP/IMAP against Gmail | Not run | needs your account; see "Before the first real send" |
 
 ## Test time

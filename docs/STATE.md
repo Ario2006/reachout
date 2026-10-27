@@ -10,12 +10,13 @@ Updated: 2026-10-28. Full plan: `docs/PARALLEL_PLAN.md`.
 
 - [x] Phase 2: follow-ups (E1 backend, E2 UI + template picker), F1 polish (palette, a11y, motion, window state, 5,000-row perf), e2e scenario with fakes, Playwright green, docs updated. Results: `docs/ACCEPTANCE.md`.
 
+- [x] Ruff backend lint (correctness rules, `ruff.toml`), Recharts dashboard charts, packaging (`scripts/build-mac.sh` -> `dist/Reachout-0.2.0-arm64.dmg`, unsigned), supervisor crash-loop race fixed. Full gate incl. Playwright green.
+
 ## In progress
-- [ ] Waiting for the user's approval to package (F2: `scripts/build-mac.sh`, unsigned .app/.dmg)
+- [ ] Nothing. Remaining is the user's own first real send (test to self, dry run, start at cap 25).
 
 ## Next
-1. F2 packaging after the user's go (use Node 24)
-2. User's own first real send: test to self, dry run, start at cap 25
+1. User's own first real send: test to self, dry run, start at cap 25
 
 ## Decisions
 - 2b is complete; not redone. A is not dispatched.
@@ -24,15 +25,13 @@ Updated: 2026-10-28. Full plan: `docs/PARALLEL_PLAN.md`.
 - Migrations are written only by the lead. Generated API files conflict at merge: the lead regenerates.
 
 ## Known gaps
-- Backend lint: `ruff` is not installed (not in the specs); `test-fast.sh` and `test-all.sh` use it automatically once present.
-- Node on this machine is v25.9; the repo pins 24 (`.nvmrc`, `engines`). Tests pass; use `nvm use` before packaging.
+- Node on this machine defaults to v25.9; the repo pins 24. `build-mac.sh` and `run.sh` select 24 via nvm.
 - 2b leftovers (P2, cut unless time remains): browser tier unverified with real Chromium, positive MX not persisted across runs, score ordering vs label.
 
 ## Baseline (before Phase 0 changes)
 Backend 615 tests 14.4 s serial; frontend 138 tests 4.7 s. After: backend 7 s with `-n 2`, full gate about 20 s.
 
 ## Review follow-ups carried forward
-- Dashboard charts are plain SVG (Recharts is named in the spec, no approval needed): swap in F1 if worthwhile.
 - IMAP polls INBOX only. Real SMTP/IMAP/Electron tray never exercised against live servers (by design: no real email).
 - Slow property tests are marked `slow`; `test-fast.sh` skips them, `test-all.sh` runs them (gate ~55 s).
 - Never exercised against live services: SMTP/IMAP to Gmail, Electron tray/hide/quit during a real send, the browser tier. Dashboard bars are not keyboard-focusable (sr-only table instead). Dark-mode input borders are below 3:1.
