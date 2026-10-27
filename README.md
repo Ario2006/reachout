@@ -39,6 +39,22 @@ opt-out footer, and acknowledgement of the legal notice.
    Keychain** (service `Reachout`) and never to a file or the database. If macOS asks whether
    `python` may use the Keychain item, choose *Always Allow* so the background worker can read it.
 
+## Install (packaged app)
+
+```bash
+scripts/build-mac.sh   # about a minute; logs in .logs/build-mac.log
+```
+
+This produces an unsigned Apple Silicon build in `dist/`: `dist/mac-arm64/Reachout.app` and
+`dist/Reachout-<version>-arm64.dmg`. Open the dmg and drag Reachout to Applications. Because the app
+is not signed or notarised, macOS blocks the first launch: right-click the app and choose **Open**,
+then **Open** again, or run `xattr -dr com.apple.quarantine /Applications/Reachout.app`.
+
+[Ollama](https://ollama.com) must be installed and running (`brew install ollama`); the app does not
+bundle it, and the setup wizard downloads the model. Your data stays in `~/Reachout` (database,
+exports, `logs/`); the Gmail App Password stays in the macOS Keychain under the service "Reachout".
+Running from source with `scripts/run.sh` is unchanged.
+
 ## Finding leads
 
 1. **Discover**: describe who you want to reach (or pick an example), choose a mode or leave it on Auto,

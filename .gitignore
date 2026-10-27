@@ -15,3 +15,7 @@ desktop/playwright-report/
 .coverage*
 coverage.json
 htmlcov/
+
+# packaging
+dist/
+.build/

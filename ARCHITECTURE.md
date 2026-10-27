@@ -166,6 +166,15 @@ behind a splash screen. A crashed process is restarted (up to 3 times a minute).
 shows an error screen with Try again, View logs, and Quit. Both processes exit if Electron dies
 (they watch their parent PID), and quitting stops them with SIGTERM, then SIGKILL after 3 s.
 
+### Packaged layout
+
+`scripts/build-mac.sh` freezes the backend with PyInstaller into one `reachout-backend` executable
+(`scripts/backend_entry.py`: roles `api`, `worker`, `selfcheck`; SQL migrations are bundled as data)
+and electron-builder ships it as an extraResource, so the app contains
+`Contents/Resources/{app.asar,backend/reachout-backend/}`. When `app.isPackaged`, the supervisor
+spawns that binary instead of `.venv` python and ignores `ELECTRON_RENDERER_URL`; data, logs and the
+Keychain service are unchanged. The build is unsigned arm64 only (`dist/` and `.build/` are ignored).
+
 ## Types
 
 `python -m backend.api.export_openapi` writes the schema; `openapi-typescript` turns it into

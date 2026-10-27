@@ -10,7 +10,7 @@ import { BackendSupervisor } from './backend-supervisor'
 import { buildCsp } from './csp'
 import { log } from './logger'
 import { buildMenu } from './menu'
-import { dataDir, logsDir, pythonPath, repoRoot } from './paths'
+import { backendBinary, dataDir, logsDir, pythonPath, repoRoot, useBundledBackend } from './paths'
 import { SendingMonitor } from './sending-monitor'
 import { splashHtml } from './splash'
 import { TrayController } from './tray'
@@ -18,7 +18,7 @@ import { fitToDisplays, parseSaved, type SavedWindow } from '../shared/window-st
 import { closeAction, isSending, IDLE, type SendingSnapshot } from '../shared/sending-guard'
 
 const DEV_URL = process.env['ELECTRON_RENDERER_URL'] ?? null
-const isDev = DEV_URL !== null
+const isDev = !app.isPackaged && DEV_URL !== null // a packaged app never loads a dev server
 const APP_SCHEME = 'reachout'
 const APP_ORIGIN = isDev && DEV_URL ? new URL(DEV_URL).origin : `${APP_SCHEME}://app`
 const RENDERER_DIR = resolve(__dirname, '../renderer')
@@ -37,6 +37,7 @@ let monitorTimer: NodeJS.Timeout | null = null
 
 const supervisor = new BackendSupervisor({
   python: pythonPath(),
+  ...(useBundledBackend() ? { bundledBackend: backendBinary() } : {}),
   repoRoot: repoRoot(),
   logsDir: logsDir(),
   allowedOrigin: APP_ORIGIN,
