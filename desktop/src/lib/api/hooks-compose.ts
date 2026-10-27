@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import { K } from './keys'
 import type { components } from './schema'
-import type { Campaign, CampaignIn, DraftPatch, DraftStatus, ProfileField, TemplateIn } from './types'
+import type { Campaign, CampaignIn, DraftKind, DraftPatch, DraftsPage, DraftStatus, ProfileField, TemplateIn } from './types'
 
 type S = components['schemas']
 export type DraftItem = S['DraftOut']
@@ -81,18 +81,30 @@ export function useSetCampaignTemplate() {
 }
 
 // ---- drafts --------------------------------------------------------------------------------
+/** 'followups' covers follow-up 1 and 2 (the API filters by one kind at a time, so both are fetched and merged). */
+export type DraftKindFilter = 'initial' | 'followups'
+
 export interface DraftQuery {
   campaignId: number | null
   status: DraftStatus[]
   q: string
+  kind?: DraftKindFilter
 }
 export const DRAFTS_LIMIT = 500
 
 export const useDrafts = (f: DraftQuery) =>
   useQuery({
     queryKey: [...K.drafts, 'list', f] as const,
-    queryFn: () =>
-      api.get('/drafts', { query: { campaign_id: f.campaignId ?? 0, status: f.status, q: f.q || undefined, limit: DRAFTS_LIMIT, kind: 'initial' } }),
+    queryFn: async (): Promise<DraftsPage> => {
+      const fetchKind = (kind: DraftKind) =>
+        api.get('/drafts', { query: { campaign_id: f.campaignId ?? 0, status: f.status, q: f.q || undefined, limit: DRAFTS_LIMIT, kind } })
+      if ((f.kind ?? 'initial') === 'initial') return fetchKind('initial')
+      const [one, two] = await Promise.all([fetchKind('followup_1'), fetchKind('followup_2')])
+      const a = one.counts
+      const b = two.counts
+      const counts = { pending: a.pending + b.pending, needs_review: a.needs_review + b.needs_review, approved: a.approved + b.approved, rejected: a.rejected + b.rejected }
+      return { ...one, items: [...one.items, ...two.items].sort((a, b) => a.id - b.id), total: one.total + two.total, counts }
+    },
     enabled: f.campaignId !== null,
     placeholderData: (prev) => prev,
   })

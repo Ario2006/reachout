@@ -41,6 +41,8 @@ function routes(c: Campaign, readiness: Readiness, extra: Record<string, unknown
     'GET /campaigns/1/readiness': { json: readiness },
     'GET /sending/status': { json: SENDING },
     'GET /campaigns/1/messages': { json: [] },
+    'GET /templates': { json: [] },
+    'GET /campaigns/1/followups': { json: { campaign_id: 1, rows: [], counts: {} } },
     ...extra,
   }
 }
