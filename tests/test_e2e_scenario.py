@@ -64,7 +64,7 @@ def test_the_whole_outreach_loop(engine, client):
         secrets.set_app_password(w.ME, "abcdabcdabcdabcd")
 
         # leads -> template and profile -> campaign
-        lead_ids = [f.lead(engine, email=f"{n}@{n}corp.test", company="Acme", name=n.title(), context_snippet=SNIPPET) for n in ("ann", "bob", "cy")]
+        [f.lead(engine, email=f"{n}@{n}corp.test", company="Acme", name=n.title(), context_snippet=SNIPPET) for n in ("ann", "bob", "cy")]
         tpl = next(t for t in client.get("/templates").json() if t["mode"] == "internship")
         client.put("/profile", json={"fields": [{"key": k, "label": k, "value": "I build software."} for k in ("my_summary", "my_pitch", "my_traction")]})
         cid = client.post("/campaigns", json={"name": "Spring", "template_id": tpl["id"], "mode": "internship",

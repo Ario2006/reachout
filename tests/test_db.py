@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 import sqlite3
 
 import pytest
@@ -31,22 +32,22 @@ def test_wal_and_foreign_keys(engine):
 def test_lead_email_unique_and_lowercase(engine):
     with engine.begin() as c:
         c.execute(text("INSERT INTO leads (email) VALUES ('a@x.com')"))
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         with engine.begin() as c:
             c.execute(text("INSERT INTO leads (email) VALUES ('a@x.com')"))
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         with engine.begin() as c:
             c.execute(text("INSERT INTO leads (email) VALUES ('B@x.com')"))
 
 
 def test_invalid_status_rejected(engine):
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         with engine.begin() as c:
             c.execute(text("INSERT INTO leads (email, status) VALUES ('a@x.com', 'bogus')"))
 
 
 def test_campaign_cap_check_constraint(engine):
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         with engine.begin() as c:
             c.execute(text("INSERT INTO campaigns (name, daily_cap) VALUES ('c', 101)"))
 

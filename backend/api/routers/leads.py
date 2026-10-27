@@ -61,13 +61,13 @@ async def import_csv(request: Request, engine: EngineDep, dry_run: bool = False)
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
-        raise HTTPException(422, "The file is not UTF-8 text")
+        raise HTTPException(422, "The file is not UTF-8 text") from None
     from fastapi.concurrency import run_in_threadpool  # MX lookups block: keep them off the event loop
 
     try:
         rep = await run_in_threadpool(exports.import_csv, text, dry_run=dry_run, engine=engine)
     except ValueError as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, str(e)) from None
     return ImportReportOut(
         total=rep.total, valid=rep.valid, inserted=rep.inserted, duplicates=rep.duplicates, suppressed=rep.suppressed,
         invalid=rep.invalid, no_mx=rep.no_mx, issues=[i.__dict__ for i in rep.issues],  # type: ignore[arg-type]

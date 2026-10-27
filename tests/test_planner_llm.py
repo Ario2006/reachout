@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 import re
 import threading
 import time
@@ -20,9 +21,9 @@ def plan_json(**kw):
 def test_plan_model_cleans_dedupes_and_caps():
     p = Plan(mode=Mode.service, search_queries=['  "a b"  ', "A B", "c", ""])
     assert p.search_queries == ["a b", "c"]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Plan(mode=Mode.service, search_queries=[f"q{i}" for i in range(13)])
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Plan.model_validate({"mode": "bogus"})
 
 

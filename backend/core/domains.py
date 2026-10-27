@@ -69,8 +69,8 @@ EXCLUDED_LOCALPARTS: frozenset[str] = frozenset({
     "care", "cs", "bugreport", "bugs", "bug", "cards", "booking", "bookings", "customersupport", "customerservice",
     "customerfeedback", "claims", "claim", "complaint", "editor", "editors", "editor1", "editorial", "newsroom",
     "contribute", "contributors", "submit", "writeforus", "guestpost", "advertise", "advertising", "ads", "adsales",
-    "api", "edi", "reports", "report", "feedback", "orders", "order", "shipping", "returns", "wholesale", "influencer",
-    "influencers", "affiliate", "affiliates", "unsubscribe", "subscribe", "subscriptions", "membership", "members", "wordpress", "example", "email", "name", "user", "username",
+    "api", "edi", "reports", "report", "order", "shipping", "wholesale", "influencer",
+    "influencers", "affiliate", "affiliates", "subscribe", "subscriptions", "membership", "members", "wordpress", "example", "email", "name", "user", "username",
     "yourname", "your-name", "you", "test", "demo", "sample",
 })
 
@@ -90,7 +90,7 @@ GENERIC_LOCALPARTS: frozenset[str] = frozenset({
     "clients", "enterprise", "education", "edu", "admissions", "student", "students", "alumni",
     "campus", "placement", "placements", "ceo", "cto", "coo", "cfo", "cmo", "md", "director",
     "president", "management", "leadership", "founders-office", "outreach", "pr", "brand",
-    "creative", "studio", "agency", "consulting", "projects", "project", "new", "newbusiness",
+    "creative", "agency", "consulting", "projects", "project", "new", "newbusiness",
 })
 
 _TWO_PART_TLDS = re.compile(r"\.(co|com|org|net|ac|gov|edu)\.[a-z]{2}$")

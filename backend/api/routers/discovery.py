@@ -15,7 +15,7 @@ def make_plan(body: PlanRequest, engine: EngineDep) -> PlanResponse:
     try:
         res = planner.make_plan(body.request, db.load_settings(engine), body.mode)
     except ValueError as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, str(e)) from None
     return PlanResponse(plan=res.plan, source=res.source, note=res.note)  # type: ignore[arg-type]
 
 
@@ -64,4 +64,4 @@ def resume_run(run_id: int, engine: EngineDep) -> dict:
     try:
         return pipeline.resume_run(run_id, engine)
     except ValueError as e:
-        raise HTTPException(404 if "not found" in str(e) else 409, str(e))
+        raise HTTPException(404 if "not found" in str(e) else 409, str(e)) from None

@@ -1,11 +1,9 @@
 import threading
 import time
 
-import pytest
-from sqlalchemy import text
 
 from backend.core import events, jobs, llm
-from backend.core.job_handlers import HANDLERS, pull_model
+from backend.core.job_handlers import HANDLERS
 
 
 def _states(engine, job_id):

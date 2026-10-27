@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 import threading
 import time
 from datetime import datetime
@@ -307,7 +308,7 @@ def test_every_decision_is_traceable_on_the_lead(world):
 def test_new_send_settings_have_safe_defaults_and_limits():
     s = AppSettings()
     assert (s.max_per_domain_per_day, s.min_minutes_between_same_domain, s.use_recipient_timezone) == (2, 60, True)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         AppSettings(max_per_domain_per_day=0)
 
 

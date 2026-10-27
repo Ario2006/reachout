@@ -110,7 +110,7 @@ def jsonld_findings(tree: LexborHTMLParser, out: StructuredFindings) -> None:
 def microdata_findings(tree: LexborHTMLParser, out: StructuredFindings) -> None:
     for el in tree.css('[itemtype*="schema.org/Person"]'):
         def prop(name: str) -> str:
-            n = el.css_first(f'[itemprop="{name}"]')
+            n = el.css_first(f'[itemprop="{name}"]')  # noqa: B023 - used within the same iteration
             if n is None:
                 return ""
             return n.attributes.get("content") or n.attributes.get("href") or n.text(strip=True)

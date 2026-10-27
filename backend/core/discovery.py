@@ -8,7 +8,6 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from urllib.parse import urljoin, urlsplit
 
 import httpx
 from selectolax.lexbor import LexborHTMLParser

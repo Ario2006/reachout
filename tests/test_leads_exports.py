@@ -130,7 +130,8 @@ def test_export_neutralises_formula_injection_and_roundtrips(engine):
     out = exports.export_csv(leads.LeadFilter(), "email:asc", engine)
     lines = out.splitlines()
     assert lines[0] == ",".join(exports.COLUMNS)
-    import csv, io
+    import csv
+    import io
     rows = list(csv.DictReader(io.StringIO(out)))
     assert rows[0]["name"].startswith("'=") and rows[0]["company"].startswith("'+")
     assert rows[1]["company"].startswith("'@") and rows[1]["role"].startswith("'-")

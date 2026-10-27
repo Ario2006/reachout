@@ -3,7 +3,6 @@ import time
 
 import httpx
 import pytest
-from sqlalchemy import text
 
 from backend.core import config, db, discovery, engine as eng, events, jobs, leads, llm, pipeline, validator
 from backend.core.afetch import AsyncFetcher
@@ -275,7 +274,7 @@ def test_team_cards_are_read_without_calling_the_model(world):
 def test_pages_that_need_the_model_share_batched_calls_one_at_a_time(world, monkeypatch):
     monkeypatch.setattr(pipeline, "make_batcher", lambda s: PeopleBatcher(s, call=world.llm, max_wait_s=0.3))
     for i in range(8):
-        world.web.routes[f"t{i}.com/"] = f'<a href="/team">t</a>'
+        world.web.routes[f"t{i}.com/"] = '<a href="/team">t</a>'
         world.web.routes[f"t{i}.com/team"] = f"<html><body><h1>Team</h1><p>Our founder Jane{i} Doe leads. " + "We build things. " * 30 + "</p></body></html>"
     monkeypatch.setattr(discovery, "make_searcher", lambda s, p: lambda q: [discovery.SearchHit(url=f"https://t{i}.com/", query=q) for i in range(8)])
     start(world.engine, queries=("q",))
@@ -395,7 +394,6 @@ def test_a_cancelled_run_resumes_where_it_stopped_without_refetching(world, monk
     done_before = first["stats"]["domains_done"]
     leads_before = set(by_email(world.engine, run["id"]))
     assert first["state"] == "cancelled" and 0 < done_before < 12
-    fetched_before = set(world.web.requests)
 
     world.web.on_request = None
     again = pipeline.resume_run(run["id"], world.engine)

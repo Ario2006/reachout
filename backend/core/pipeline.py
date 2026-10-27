@@ -278,7 +278,7 @@ async def _run_async(ctx: JobContext, run: _Run, plan: Plan, opts: RunOptions, s
 
                 t_search = time.monotonic()
                 hits = await ec.blocking(lambda: discovery.run_searches(
-                    plan.model_copy(update={"search_queries": queries}), searcher, on_query=on_query, cancelled=cancel.is_set))
+                    plan.model_copy(update={"search_queries": queries}), searcher, on_query=on_query, cancelled=cancel.is_set))  # noqa: B023 - used within the same iteration
                 candidates = discovery.rank_candidates(hits, settings)
                 if opts.expand_lists and not cancel.is_set():
                     run.log("Following list pages (e.g. “Top 50 startups in …”) to find company sites…")

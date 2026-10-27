@@ -1,0 +1,7 @@
+# Correctness-focused lint: real bugs, not formatting. Line length is not enforced.
+target-version = "py311"
+extend-exclude = [".venv", "desktop"]
+
+[lint]
+select = ["F", "E4", "E7", "E9", "B", "ASYNC", "PLE"]
+ignore = ["B008", "B905", "E741", "E702", "E731", "E402", "B007"]  # B008: FastAPI Depends()/Query() defaults; the rest are style

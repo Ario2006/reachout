@@ -6,7 +6,6 @@ from backend.api.main import create_app
 from backend.core import campaigns, jobs, secrets, services
 from backend.core.job_handlers import HANDLERS
 from backend.core.ports import RecipientRejected
-from tests import factories
 from tests.sending_world import ME, camp, fresh, make_campaign, msg, sender
 
 TOKEN = "t" * 32

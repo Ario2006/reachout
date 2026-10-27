@@ -1,6 +1,5 @@
 import json
 
-import pytest
 
 from backend.core import db, domains, leads, scoring
 from backend.core.extractor import LeadDraft
@@ -128,7 +127,6 @@ def test_the_pipeline_log_has_one_json_line_per_decision_with_the_trace_id(engin
     from backend.core.planner import Plan
     run = pipeline.create_run("x", Plan(mode="service", search_queries=["q"]), pipeline.RunOptions(), engine)
     leads.ingest([draft()], run_id=run["id"], mode="service", engine=engine)
-    from backend.core import config
     lines = [json.loads(x) for x in (config.logs_dir() / "pipeline.jsonl").read_text().splitlines()]
     assert lines[-1]["kind"] == "lead.created" and lines[-1]["run_id"] == run["id"] and lines[-1]["trace_id"] and lines[-1]["score"] > 0
     assert "priya" not in json.dumps(lines)  # the log carries ids and domains, not addresses

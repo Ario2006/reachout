@@ -7,7 +7,6 @@ from hypothesis import event, given, settings, target
 from hypothesis import strategies as st
 
 from backend.core import llm, personaliser as p, services
-from backend.core.fakes import FakeLlm
 
 SNIP = json.loads((Path(__file__).parent / "fixtures/compose/snippets.json").read_text())
 GOOD = SNIP["good"]

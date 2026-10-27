@@ -42,7 +42,7 @@ def update_settings(body: SettingsUpdate, engine: EngineDep) -> SettingsResponse
     try:
         new = AppSettings.model_validate(current.model_dump() | changes)
     except ValidationError as e:
-        raise validation_422(e)
+        raise validation_422(e) from e
     notices = []
     if changes.get("daily_cap", 0) > config.HARD_DAILY_CEILING:
         notices.append(f"Daily cap limited to the hard ceiling of {config.HARD_DAILY_CEILING}.")
@@ -67,7 +67,7 @@ def put_gmail(body: GmailUpdate, engine: EngineDep) -> GmailStatus:
         db.save_settings(current.model_copy(update={"gmail_address": address}), engine)
         return GmailStatus(address=address, password_set=secrets.has_app_password(address))
     except KeyringError:
-        raise HTTPException(500, "Could not write to the macOS Keychain. Check Keychain Access permissions.")
+        raise HTTPException(500, "Could not write to the macOS Keychain. Check Keychain Access permissions.") from None
 
 
 @router.delete("/gmail/password", response_model=GmailStatus)

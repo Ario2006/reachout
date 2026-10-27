@@ -34,7 +34,7 @@ def remove_suppression(engine: EngineDep, email: str = Query(...),
     try:
         norm = validate_email(email, check_deliverability=False).normalized.lower()
     except EmailNotValidError:
-        raise HTTPException(422, "Invalid email address")
+        raise HTTPException(422, "Invalid email address") from None
     if confirm.strip().lower() != norm:
         raise HTTPException(400, "Confirmation does not match the email address")
     result = db.remove_manual_suppression(norm, engine)

@@ -4,7 +4,6 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from backend.api.deps import EngineDep
-from backend.api.schemas import JobOut
 from backend.api.schemas_campaigns import (CampaignIn, CampaignOut, CampaignStats, ConfirmMessageIn, DryRunOut,
                                            MessageOut, MessageState, Readiness, SendingStatus, TestSendOut)
 from backend.core import campaigns, jobs
