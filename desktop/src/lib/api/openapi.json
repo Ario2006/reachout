@@ -1537,6 +1537,17 @@
           "lead_id": {
             "title": "Lead Id",
             "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "required": [

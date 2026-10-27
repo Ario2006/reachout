@@ -152,3 +152,4 @@ class FollowupPlan(BaseModel):
 class FollowupSkipIn(BaseModel):
     lead_id: int
     kind: Literal["followup_1", "followup_2"]
+    reason: str | None = None  # shown in the plan; "Skipped by you." when empty
