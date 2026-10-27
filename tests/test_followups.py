@@ -56,6 +56,11 @@ def go(svc, days):
     svc.fake_clock.advance(days * DAY + 1)
 
 
+def campaign_state(engine, cid):
+    with engine.connect() as c:
+        return c.execute(text("SELECT state FROM campaigns WHERE id=:c"), {"c": cid}).scalar()
+
+
 # ------------------------------------------------------------------ scheduling
 def test_nothing_is_created_before_the_day_and_the_campaign_stays_open(world):
     engine, svc = world
@@ -105,13 +110,13 @@ def test_followup_2_threads_on_both_earlier_messages(world):
     run_ticks(snd, svc, 3)
     f1 = msg(engine, cid, a, "followup_1")
     assert f1["state"] == "sent"
-    go(svc, 8)
-    assert followups.tick(engine)["queued"] == 0  # 9 days after FOLLOW-UP 1, not after the first email
-    go(svc, 2)
+    go(svc, 4)  # about day 8
+    assert followups.tick(engine)["queued"] == 0
+    go(svc, 1.5)  # past day 9 counted from the FIRST email (cumulative days)
     assert followups.tick(engine)["queued"] == 1
     f2 = msg(engine, cid, a, "followup_2")
     assert f2["in_reply_to"] == f1["message_id"] and f2["references_text"] == f"{first['message_id']} {f1['message_id']}"
-    assert f2["not_before"] == pytest.approx(f1["claimed_at"] + 9 * DAY)
+    assert f2["not_before"] == pytest.approx(first["claimed_at"] + 9 * DAY)
     run_ticks(snd, svc, 3)
     e = svc.fake_mailer.sent[-1]
     assert e.subject == "Re: Hello 0" and e.in_reply_to == f1["message_id"] and e.references == (first["message_id"], f1["message_id"])
@@ -368,11 +373,30 @@ def test_a_campaign_without_template_is_skipped_with_a_reason(world):
     assert "no template" in rows(engine, cid, "followup_1")[0]["reason"]
 
 
-def test_a_template_that_cannot_render_writes_nothing_and_says_so_once(world):
+def test_a_template_that_cannot_render_writes_nothing(world):
     engine, svc = world
     cid, (a,), snd = fu_campaign(engine, svc, n=1, tpl=dict(followup_1_body="{{ 1/0 }}"))
+    go(svc, 4)
+    followups.tick(engine)
+    followups.tick(engine)
+    with engine.connect() as c:
+        assert c.execute(text("SELECT COUNT(*) FROM drafts WHERE kind='followup_1'")).scalar() == 0
+        assert c.execute(text("SELECT COUNT(*) FROM messages WHERE kind='followup_1'")).scalar() == 0
+
+
+def test_a_render_failure_that_depends_on_the_lead_is_traced_once(world, monkeypatch):
+    engine, svc = world
+    cid, (a,), snd = fu_campaign(engine, svc, n=1)
     with engine.begin() as c:
         c.execute(text("UPDATE leads SET trace_id='tr-1' WHERE id=:i"), {"i": a})
+    real = followups.composer.render
+
+    def boom(template, values, opener):
+        if values:
+            raise followups.composer.TemplateError("bad value")
+        return real(template, values, opener)
+
+    monkeypatch.setattr(followups.composer, "render", boom)
     go(svc, 4)
     followups.tick(engine)
     followups.tick(engine)
@@ -483,3 +507,56 @@ def test_sent_at_is_the_fallback_when_there_is_no_claim_time(world):
     assert followups._ts({"claimed_at": None, "sent_at": "garbage"}) is None
     assert followups._ts({"claimed_at": None, "sent_at": None}) is None
     assert followups._days("not json") == [] and followups._days("[4, 9, 14]") == [4, 9]
+
+
+# ------------------------------------------------------------------ review round
+def test_the_campaign_does_not_flap_between_done_and_running(world):
+    engine, svc = world
+    cid, (a,), snd = fu_campaign(engine, svc, n=1)
+    seen = []
+    for _ in range(40):  # about 13 days in 8-hour steps, sender and follow-up ticks interleaved
+        svc.fake_clock.advance(8 * 3600)
+        followups.tick(engine)
+        snd.tick()
+        seen.append(campaign_state(engine, cid))
+        snd.tick()
+    assert [m for m in svc.fake_mailer.sent if m.subject.startswith("Re:")].__len__() == 2
+    first_done = seen.index("done")
+    assert set(seen[:first_done]) == {"running"} and set(seen[first_done:]) == {"done"}  # one transition, no reopening
+    assert msg(engine, cid, a, "followup_2")["state"] == "sent"
+    assert rows(engine, cid, "followup_2")[0]["state"] == "sent"
+
+
+def test_turning_followups_off_cancels_queued_ones_and_rejects_pending_drafts(world):
+    engine, svc = world
+    cid, (a, b), snd = fu_campaign(engine, svc)
+    cid2, (c1,), _ = fu_campaign(engine, svc, n=1, followups_require_approval=1)
+    go(svc, 4)
+    followups.tick(engine)  # a and b are queued, c1 awaits approval
+    with engine.begin() as c:
+        c.execute(text("UPDATE campaigns SET followups_enabled=0"))
+    followups.tick(engine)
+    for lid in (a, b):
+        m = msg(engine, cid, lid, "followup_1")
+        assert m["state"] == "cancelled" and m["error"] == "Follow-ups turned off."
+    with engine.connect() as c:
+        assert c.execute(text("SELECT status FROM drafts WHERE lead_id=:l AND kind='followup_1'"), {"l": c1}).scalar() == "rejected"
+    assert run_ticks(snd, svc, 3) == 0
+    followups.tick(engine)  # idempotent
+    assert msg(engine, cid, a, "initial")["state"] == "sent"
+
+
+def test_a_template_that_cannot_render_or_has_no_text_shows_a_reason_in_the_plan(world):
+    engine, svc = world
+    cid, (a,), snd = fu_campaign(engine, svc, n=1, tpl=dict(followup_1_body="{{ 1/0 }}"))
+    go(svc, 4)
+    followups.tick(engine)
+    r = rows(engine, cid, "followup_1")[0]
+    assert r["state"] == "skipped" and "could not be written" in r["reason"]
+    assert rows(engine, cid, "followup_2")[0]["state"] == "skipped"
+    cid2, (b,), _ = fu_campaign(engine, svc, n=1, tpl=dict(followup_1_body="  "))
+    go(svc, 4)
+    assert "no text for follow-up 1" in rows(engine, cid2, "followup_1")[0]["reason"]
+    cid3, (d,), _ = fu_campaign(engine, svc, n=1, tpl=dict(followup_1_body="{{ '' }}"))
+    go(svc, 4)
+    assert "empty" in rows(engine, cid3, "followup_1")[0]["reason"]

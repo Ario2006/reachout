@@ -3,8 +3,8 @@
 Rules (the plan and the tick share `_evaluate`, so what the screen says is what the worker does):
 
 * Follow-up N is considered only when the PREVIOUS email of the chain (initial, then follow-up 1) is `sent`: not failed,
-  cancelled or waiting for confirmation. It is due `followup_days[N-1]` days after that previous email went out
-  (`messages.claimed_at`, the sender's clock; `sent_at` is the fallback).
+  cancelled or waiting for confirmation. It is due `followup_days[N-1]` days after the FIRST email went out (cumulative:
+  day 4 and day 9 by default; `messages.claimed_at`, the sender's clock; `sent_at` is the fallback).
 * Nothing is created for a person who replied, bounced, opted out, sent an auto-reply, is closed or is suppressed.
   These are facts about the lead, re-read on every tick.
 * When due, the tick writes a draft `followup_N` (subject `Re: <original>`, body = template.followup_N_body rendered for
@@ -26,6 +26,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from datetime import datetime, timezone
 
 from apscheduler.schedulers.base import BaseScheduler
@@ -111,6 +112,24 @@ def _blocked(lead: dict, suppressed: bool) -> str | None:
     return None
 
 
+def _body_problem(tpl: dict | None, kind: str, n: int) -> str | None:
+    """Why the follow-up text cannot be written from this template, or None."""
+    if tpl is None:
+        return "The campaign has no template, so there is no follow-up text."
+    return _render_problem(tpl.get(f"{kind}_body") or "", n)
+
+
+@lru_cache(maxsize=256)
+def _render_problem(body: str, n: int) -> str | None:
+    if not body.strip():
+        return f"The template has no text for follow-up {n}."
+    try:
+        out = composer.render({"subject": "-", "body": body}, {}, "")
+    except composer.TemplateError as e:
+        return f"The follow-up {n} text could not be written: {e}"
+    return None if out.body.strip() else f"The template text for follow-up {n} is empty once filled in."
+
+
 def _evaluate(lead: dict, suppressed: bool, msgs: dict[str, dict], drafts: dict[str, dict], days: list[int],
               tpl: dict | None, campaign_state: str, now: float) -> list[Step]:
     """One Step per planned follow-up for a person whose first email was sent. Pure: no writes."""
@@ -123,20 +142,17 @@ def _evaluate(lead: dict, suppressed: bool, msgs: dict[str, dict], drafts: dict[
     active = campaign_state in _ACTIVE
     stop: str | None = None  # why later steps cannot happen yet; None while the chain is intact
     final = False  # True: the chain has ended for good (skipped), False: later steps just wait
-    last_due = prev_ts
+    first_ts = prev_ts
     for idx, kind in enumerate(KINDS[: len(days)]):
         m, d = msgs.get(kind), drafts.get(kind)
-        due = last_due + days[idx] * _DAY
-        last_due = due
+        due = first_ts + days[idx] * _DAY
         n = idx + 1
         if stop is not None:
             steps.append(Step(kind, "skipped" if final else "waiting", stop, due))
             continue
         step: Step
         if m is not None and m["state"] == "sent":
-            sent_ts = _ts(m) or due
-            last_due = sent_ts
-            steps.append(Step(kind, "sent", None, sent_ts))
+            steps.append(Step(kind, "sent", None, _ts(m) or due))
             continue
         if m is not None:
             st = m["state"]
@@ -164,10 +180,8 @@ def _evaluate(lead: dict, suppressed: bool, msgs: dict[str, dict], drafts: dict[
         elif d is not None:
             step = Step(kind, "awaiting_approval", "Approve this follow-up in the draft review to send it.", due)
             stop, final = f"Follow-up {n} has not been sent yet.", False
-        elif tpl is None:
-            step, stop, final = Step(kind, "skipped", "The campaign has no template, so there is no follow-up text.", due), "There is no follow-up text.", True
-        elif not (tpl.get(f"{kind}_body") or "").strip():
-            step, stop, final = Step(kind, "skipped", f"The template has no text for follow-up {n}.", due), "There is no follow-up text.", True
+        elif (problem := _body_problem(tpl, kind, n)) is not None:
+            step, stop, final = Step(kind, "skipped", problem, due), "There is no follow-up text.", True
         else:
             step = Step(kind, "due", None if active else f"The campaign is {campaign_state}.", due, "create" if active else None)
             stop, final = f"Follow-up {n} has not been sent yet.", False
@@ -278,10 +292,28 @@ def _tick_campaign(engine: Engine, campaign_id: int, now: float) -> dict:
     return out
 
 
+def _cancel_disabled(engine: Engine) -> int:
+    """Follow-ups turned off for a campaign: queued ones are cancelled and pending drafts rejected (once; idempotent)."""
+    reason = "Follow-ups turned off."
+    with engine.connect() as c:
+        queued = c.execute(text("SELECT m.id, m.lead_id, m.campaign_id, m.kind FROM messages m JOIN campaigns cp ON cp.id = m.campaign_id "
+                                "WHERE cp.followups_enabled = 0 AND m.kind != 'initial' AND m.state = 'queued'")).all()
+    n = 0
+    for mid, lead_id, cid, kind in queued:
+        if outbox.cancel(mid, reason, engine):
+            n += 1
+            event_types.publish("message", event_types.MessageEvent(campaign_id=cid, lead_id=lead_id, message_id=mid, kind=kind, state="cancelled"), engine)  # type: ignore[arg-type]
+    with engine.begin() as c:
+        c.execute(text("UPDATE drafts SET status='rejected', approved=0, approved_at=NULL, updated_at=datetime('now') WHERE kind != 'initial' "
+                       "AND status IN ('pending','needs_review') AND campaign_id IN (SELECT id FROM campaigns WHERE followups_enabled = 0)"))
+    return n
+
+
 def tick(engine: Engine, now: float | None = None) -> dict:
     """One pass over every campaign with follow-ups enabled. Safe to run as often as you like. Returns counts."""
     now = services.get_services().clock.now() if now is None else now
     total = {"drafts": 0, "queued": 0, "reopened": 0}
+    _cancel_disabled(engine)
     with engine.connect() as c:
         ids = [r[0] for r in c.execute(text("SELECT id FROM campaigns WHERE followups_enabled=1 AND state IN ('running','done') ORDER BY id"))]
     for cid in ids:
