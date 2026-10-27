@@ -11,3 +11,10 @@ export const repoRoot = (): string => resolve(app.getAppPath(), '..')
 
 export const pythonPath = (): string =>
   process.env['REACHOUT_PYTHON'] || join(repoRoot(), '.venv', 'bin', 'python')
+
+/** Packaged app: the PyInstaller bundle shipped as an extraResource (see package.json "build"). */
+export const backendBinary = (): string =>
+  process.env['REACHOUT_BACKEND_BIN'] || join(process.resourcesPath, 'backend', 'reachout-backend', 'reachout-backend')
+
+/** Packaged builds run the bundled backend; dev runs python from the repo .venv. */
+export const useBundledBackend = (): boolean => app.isPackaged

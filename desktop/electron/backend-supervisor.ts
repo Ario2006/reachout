@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { closeSync, mkdirSync, openSync } from 'node:fs'
 import { createServer } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { BackendInfo, BackendStatus } from '../shared/bridge'
 import { log } from './logger'
 
@@ -14,6 +14,8 @@ const KILL_GRACE_MS = 30_000  // must exceed backend/worker.py SEND_DRAIN_S (25 
 
 interface Options {
   python: string
+  /** Packaged mode: the bundled executable (takes `api` or `worker`); python and PYTHONPATH are not used. */
+  bundledBackend?: string
   repoRoot: string
   logsDir: string
   /** The renderer origin the API will accept (CORS + Origin check). */
@@ -94,6 +96,9 @@ export class BackendSupervisor extends EventEmitter {
   }
 
   private args(role: Role): string[] {
+    if (this.opts.bundledBackend) {
+      return role === 'worker' ? ['worker'] : ['api', '--host', '127.0.0.1', '--port', String(this.port), '--log-level', 'info']
+    }
     if (role === 'worker') return ['-m', 'backend.worker']
     const a = [
       '-m', 'uvicorn', 'backend.api.main:create_app', '--factory',
@@ -105,12 +110,13 @@ export class BackendSupervisor extends EventEmitter {
 
   private spawnRole(role: Role): void {
     const fd = openSync(join(this.opts.logsDir, `${role}.log`), 'a')
-    const child = spawn(this.opts.python, this.args(role), {
-      cwd: this.opts.repoRoot,
+    const bundled = this.opts.bundledBackend
+    const child = spawn(bundled ?? this.opts.python, this.args(role), {
+      cwd: bundled ? dirname(bundled) : this.opts.repoRoot,
       stdio: ['ignore', fd, fd],
       env: {
         ...process.env,
-        PYTHONPATH: this.opts.repoRoot,
+        ...(bundled ? {} : { PYTHONPATH: this.opts.repoRoot }),
         PYTHONUNBUFFERED: '1',
         REACHOUT_API_TOKEN: this.token,
         REACHOUT_ALLOWED_ORIGINS: this.opts.allowedOrigin,
