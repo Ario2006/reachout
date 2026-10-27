@@ -1,3 +1,4 @@
+import pytest
 """Opener guardrails: unit cases plus a property test that an accepted opener invents nothing."""
 import json
 from pathlib import Path
@@ -164,6 +165,7 @@ def oracle_violations(opener: str, snippet: str) -> list[str]:
 
 @settings(max_examples=600, deadline=None)
 @given(snip=st.lists(words, min_size=3, max_size=14).map(" ".join), op=st.lists(words, min_size=1, max_size=40).map(" ".join))
+@pytest.mark.slow
 def test_accepted_opener_invents_no_number_url_or_name(snip, op):
     ok = p.check_opener(op, snip).ok
     target(float(ok))

@@ -334,6 +334,7 @@ def test_property_nobody_is_emailed_twice_or_when_suppressed_across_interleaving
 
 
 @PROP
+@pytest.mark.slow
 @given(cap=st.integers(1, 150), camp_cap=st.integers(1, 100), leads=st.integers(1, 30))
 def test_property_daily_cap_and_hard_ceiling(engine, memory_keyring, cap, camp_cap, leads):
     svc, s = fresh(engine, daily_cap=min(cap, 100), max_per_domain_per_day=10, min_minutes_between_same_domain=0)
@@ -357,6 +358,7 @@ def test_the_hard_ceiling_beats_any_setting():
 
 
 @PROP
+@pytest.mark.slow
 @given(start_h=st.integers(0, 22), length_h=st.integers(1, 6), days=st.sets(st.integers(0, 6), min_size=1))
 def test_property_sends_only_inside_the_send_window(engine, memory_keyring, start_h, length_h, days):
     ws, we = f"{start_h:02d}:00", f"{min(start_h + length_h, 23):02d}:{'00' if start_h + length_h < 24 else '59'}"
@@ -379,6 +381,7 @@ def test_property_sends_only_inside_the_send_window(engine, memory_keyring, star
 
 
 @PROP
+@pytest.mark.slow
 @given(lo=st.integers(60, 300), extra=st.integers(0, 300), seed=st.integers(0, 1000))
 def test_property_throttle_between_sends_is_within_the_configured_range(engine, memory_keyring, lo, extra, seed):
     svc, s = fresh(engine, daily_cap=100, max_per_domain_per_day=10, min_minutes_between_same_domain=0)

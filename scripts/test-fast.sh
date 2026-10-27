@@ -13,7 +13,7 @@ if [ -n "$py_changed" ] && $PY -m ruff --version >/dev/null 2>&1; then
   # shellcheck disable=SC2086
   $PY -m ruff check $py_changed > .logs/ruff.log 2>&1 || { echo "ruff: FAIL"; tail -n 20 .logs/ruff.log; fail=1; }
 fi
-$PY -m pytest --testmon -q -x -p no:cacheprovider > .logs/t1-py.log 2>&1 || { echo "pytest: FAIL"; tail -n 30 .logs/t1-py.log; fail=1; }
+$PY -m pytest --testmon -q -x -m 'not slow' -p no:cacheprovider > .logs/t1-py.log 2>&1 || { echo "pytest: FAIL"; tail -n 30 .logs/t1-py.log; fail=1; }
 echo "pytest: $(tail -n 1 .logs/t1-py.log)"
 if [ -n "$fe_changed" ]; then
   # shellcheck disable=SC2086
