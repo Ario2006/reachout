@@ -1,13 +1,16 @@
 """The send-safety core: what must be true before any email leaves, and what happens if the app dies mid-send.
 
-There is no SMTP here (that arrives with Milestone 4). This module owns the *message state machine* the sender will
-drive, so the guarantees are in place first and tested without a mail server:
+There is no SMTP here: `backend.core.sender` drives this *message state machine* through the `Mailer` port, so the
+guarantees live in one place and are tested without a mail server:
 
     queued -> sending -> sent
-                     \-> failed              (SMTP refused or never connected: nothing was sent)
-                     \-> needs_confirmation  (outcome unknown: crash, or a timeout after the message was handed over)
+                     -> failed              (SMTP refused or never connected: nothing was sent)
+                     -> needs_confirmation  (outcome unknown: crash, or a timeout after the message was handed over)
     needs_confirmation -> sent | queued      (only by an explicit user decision; never automatically)
+    sending -> queued                        (`release`: the server never got the message, e.g. login refused)
 
+* Approval is part of the state machine: `enqueue` refuses unless an approved draft exists and snapshots its text;
+  `check` / `claim` refuse (`not_approved`) unless that draft is STILL approved and still says exactly what was queued.
 * One message per (campaign, lead, kind), enforced by a unique index. `enqueue` is idempotent.
 * `claim` moves queued -> sending in ONE SQL statement that also re-checks suppression, the daily cap, the per-company
   limit and the gap between people at one company, so two workers can never both pass the same quota.
@@ -47,9 +50,21 @@ def _trace(c, trace_id: str | None, kind: str, message: str) -> None:
         c.execute(text("INSERT INTO trace_events (trace_id, kind, message) VALUES (:t, :k, :m)"), {"t": trace_id, "k": kind, "m": message})
 
 
-def enqueue(lead_id: int, campaign_id: int, kind: str, subject: str = "", engine: Engine | None = None) -> tuple[int, bool]:
-    """Queue one email. Returns (message id, created). Asking again for the same (campaign, lead, kind) returns the
-    existing message and created=False, whatever state it is in: a person is never queued twice."""
+class NotApproved(ValueError):
+    """There is no approved draft for this (campaign, lead, kind): nothing may be queued."""
+
+
+def _approved_draft(c, campaign_id: int, lead_id: int, kind: str):
+    return c.execute(text("SELECT id, subject, body FROM drafts WHERE campaign_id=:c AND lead_id=:l AND kind=:k AND status='approved' AND approved=1"),
+                     {"c": campaign_id, "l": lead_id, "k": kind}).first()
+
+
+def enqueue(lead_id: int, campaign_id: int, kind: str, subject: str = "", engine: Engine | None = None,
+            not_before: float | None = None) -> tuple[int, bool]:
+    """Queue one email from the APPROVED draft for (campaign, lead, kind), snapshotting its subject and body (without
+    the footer). Returns (message id, created). Asking again returns the existing message and created=False, whatever
+    state it is in: a person is never queued twice. `subject` is ignored: the approved draft's subject is what was
+    approved. Raises NotApproved when there is no approved draft."""
     engine = engine or db.get_engine()
     if kind not in KINDS:
         raise ValueError(f"Unknown message kind {kind!r}")
@@ -57,11 +72,18 @@ def enqueue(lead_id: int, campaign_id: int, kind: str, subject: str = "", engine
         lead = c.execute(text("SELECT email, trace_id FROM leads WHERE id = :i"), {"i": lead_id}).first()
         if lead is None:
             raise ValueError("Lead not found")
+        existing = c.execute(text("SELECT id FROM messages WHERE campaign_id=:c AND lead_id=:l AND kind=:k"), {"c": campaign_id, "l": lead_id, "k": kind}).first()
+        if existing:
+            return int(existing[0]), False
+        draft = _approved_draft(c, campaign_id, lead_id, kind)
+        if draft is None:
+            raise NotApproved("There is no approved draft for this person, so nothing was queued.")
         email = lead[0].lower()
         res = c.execute(text(
-            "INSERT OR IGNORE INTO messages (lead_id, campaign_id, kind, subject, state, recipient_email, recipient_domain, trace_id) "
-            "VALUES (:l, :c, :k, :s, 'queued', :e, :d, :t)"),
-            {"l": lead_id, "c": campaign_id, "k": kind, "s": subject, "e": email, "d": domains.registrable(domains.split_email(email)[1]), "t": lead[1]})
+            "INSERT OR IGNORE INTO messages (lead_id, campaign_id, kind, subject, body, draft_id, state, recipient_email, recipient_domain, trace_id, not_before) "
+            "VALUES (:l, :c, :k, :s, :b, :dr, 'queued', :e, :d, :t, :nb)"),
+            {"l": lead_id, "c": campaign_id, "k": kind, "s": draft[1], "b": draft[2], "dr": draft[0], "e": email,
+             "d": domains.registrable(domains.split_email(email)[1]), "t": lead[1], "nb": not_before})
         if res.rowcount:
             _trace(c, lead[1], "queued", f"Queued a {kind} email for sending")
             return int(res.lastrowid), True
@@ -79,6 +101,7 @@ def get_message(message_id: int, engine: Engine | None = None) -> dict | None:
 def _context(c, message_id: int) -> dict | None:
     r = c.execute(text(
         "SELECT m.id, m.state, m.kind, m.lead_id, m.campaign_id, m.recipient_email, m.recipient_domain, m.trace_id, "
+        "m.body, m.subject, m.not_before, "
         "l.status AS lead_status, l.email_confidence AS conf, l.search_run_id AS run_id, "
         "cp.state AS campaign_state, cp.daily_cap AS campaign_cap, cp.window_start AS cw_start, cp.window_end AS cw_end "
         "FROM messages m JOIN leads l ON l.id = m.lead_id JOIN campaigns cp ON cp.id = m.campaign_id WHERE m.id = :i"), {"i": message_id}).mappings().first()
@@ -99,6 +122,23 @@ def effective_cap(settings: AppSettings, campaign_cap: int) -> int:
     return max(0, min(settings.daily_cap, campaign_cap, HARD_DAILY_CEILING))
 
 
+def paused_all(c) -> bool:
+    return c.execute(text("SELECT value FROM app_state WHERE key='pause_all'")).scalar() == "1"
+
+
+def is_paused_all(engine: Engine | None = None) -> bool:
+    engine = engine or db.get_engine()
+    with engine.connect() as c:
+        return paused_all(c)
+
+
+def set_paused_all(value: bool, engine: Engine | None = None) -> None:
+    engine = engine or db.get_engine()
+    with engine.begin() as c:
+        c.execute(text("INSERT INTO app_state (key, value) VALUES ('pause_all', :v) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')"),
+                  {"v": "1" if value else "0"})
+
+
 def check(message_id: int, now: float, settings: AppSettings, engine: Engine | None = None) -> ClaimResult:
     """Read-only: may this message be claimed right now? Same rules as `claim`, with a reason when it may not."""
     engine = engine or db.get_engine()
@@ -108,31 +148,70 @@ def check(message_id: int, now: float, settings: AppSettings, engine: Engine | N
             return ClaimResult(False, "missing", "That message does not exist.")
         if m["state"] != "queued":
             return ClaimResult(False, "not_queued", f"The message is {m['state'].replace('_', ' ')}, so it will not be sent again.")
-        if db.is_suppressed(m["recipient_email"], engine):
-            return ClaimResult(False, "suppressed", "This address is on the suppression list.")
-        if m["lead_status"] in BLOCKING_LEAD_STATUS:
-            return ClaimResult(False, "lead_status", f"The lead is marked {m['lead_status'].replace('_', ' ')}.")
-        if m["conf"] == "guessed" and not settings.allow_guessed_emails:
-            return ClaimResult(False, "guessed", "Guessed addresses are not sent to unless you allow it in Settings.")
-        if m["campaign_state"] != "running":
-            return ClaimResult(False, "campaign", f"The campaign is {m['campaign_state']}, not running.")
-        zone = tz.infer_zone(m["recipient_email"].split("@", 1)[1], _plan_regions(c, m["run_id"])) if settings.use_recipient_timezone else None
-        if not tz.in_send_window(now, m["cw_start"] or settings.window_start, m["cw_end"] or settings.window_end, settings.send_days, zone):
-            where = f"in {zone.key}" if zone else "on this Mac"
-            return ClaimResult(False, "window", f"Outside the sending window {where}.", retry_at=None)
-        day = tz.local_day_start(now)
-        today = c.execute(text(f"SELECT COUNT(*) FROM messages WHERE state IN {COUNTED} AND claimed_at >= :d"), {"d": day}).scalar_one()
-        cap = effective_cap(settings, m["campaign_cap"])
-        if today >= cap:
-            return ClaimResult(False, "daily_cap", f"The daily limit of {cap} emails has been reached.", retry_at=day + 86400)
-        per = c.execute(text(f"SELECT COUNT(*) FROM messages WHERE state IN {COUNTED} AND recipient_domain = :d AND claimed_at >= :s"),
-                        {"d": m["recipient_domain"], "s": day}).scalar_one()
-        if per >= settings.max_per_domain_per_day:
-            return ClaimResult(False, "domain_daily_limit", f"Already {per} email(s) to {m['recipient_domain']} today (limit {settings.max_per_domain_per_day}).", retry_at=day + 86400)
-        gap = settings.min_minutes_between_same_domain * 60
-        last = c.execute(text(f"SELECT MAX(claimed_at) FROM messages WHERE state IN {COUNTED} AND recipient_domain = :d"), {"d": m["recipient_domain"]}).scalar()
-        if last is not None and now - last < gap:
-            return ClaimResult(False, "domain_gap", f"Another person at {m['recipient_domain']} was emailed recently; waiting {settings.min_minutes_between_same_domain} minutes between people.", retry_at=last + gap)
+        return _check_ctx(c, m, now, settings, engine)
+
+
+def _virtual_context(c, campaign_id: int, lead_id: int, kind: str) -> dict | None:
+    """The context a message WOULD have if the approved draft were queued now (dry run). The campaign counts as running."""
+    r = c.execute(text(
+        "SELECT NULL AS id, 'queued' AS state, d.kind AS kind, l.id AS lead_id, cp.id AS campaign_id, lower(l.email) AS recipient_email, "
+        "l.trace_id AS trace_id, d.body AS body, d.subject AS subject, NULL AS not_before, l.status AS lead_status, "
+        "l.email_confidence AS conf, l.search_run_id AS run_id, 'running' AS campaign_state, cp.daily_cap AS campaign_cap, "
+        "cp.window_start AS cw_start, cp.window_end AS cw_end "
+        "FROM drafts d JOIN leads l ON l.id = d.lead_id JOIN campaigns cp ON cp.id = d.campaign_id "
+        "WHERE d.campaign_id=:c AND d.lead_id=:l AND d.kind=:k"), {"c": campaign_id, "l": lead_id, "k": kind}).mappings().first()
+    if r is None:
+        return None
+    m = dict(r)
+    m["recipient_domain"] = domains.registrable(domains.split_email(m["recipient_email"])[1])
+    return m
+
+
+def check_draft(campaign_id: int, lead_id: int, kind: str, now: float, settings: AppSettings, engine: Engine | None = None) -> ClaimResult:
+    """Dry run: the same rules as `check`, for a draft that has not been queued. Nothing is written."""
+    engine = engine or db.get_engine()
+    with engine.connect() as c:
+        m = _virtual_context(c, campaign_id, lead_id, kind)
+        if m is None:
+            return ClaimResult(False, "missing", "That draft does not exist.")
+        return _check_ctx(c, m, now, settings, engine)
+
+
+def _check_ctx(c, m: dict, now: float, settings: AppSettings, engine: Engine) -> ClaimResult:
+    if db.is_suppressed(m["recipient_email"], engine):
+        return ClaimResult(False, "suppressed", "This address is on the suppression list.")
+    if m["lead_status"] in BLOCKING_LEAD_STATUS:
+        return ClaimResult(False, "lead_status", f"The lead is marked {m['lead_status'].replace('_', ' ')}.")
+    if m["conf"] == "guessed" and not settings.allow_guessed_emails:
+        return ClaimResult(False, "guessed", "Guessed addresses are not sent to unless you allow it in Settings.")
+    draft = _approved_draft(c, m["campaign_id"], m["lead_id"], m["kind"])
+    if draft is None:
+        return ClaimResult(False, "not_approved", "There is no approved draft for this email (it was never approved, or it was edited after approval).")
+    if draft[2] != m["body"] or draft[1] != m["subject"]:
+        return ClaimResult(False, "not_approved", "The draft changed after it was queued. Approve it again before it can be sent.")
+    if paused_all(c):
+        return ClaimResult(False, "paused_all", "Sending is paused for all campaigns.")
+    if m["campaign_state"] != "running":
+        return ClaimResult(False, "campaign", f"The campaign is {m['campaign_state']}, not running.")
+    if m["not_before"] is not None and now < m["not_before"]:
+        return ClaimResult(False, "not_before", "This follow-up is not due yet.", retry_at=m["not_before"])
+    zone = tz.infer_zone(m["recipient_email"].split("@", 1)[1], _plan_regions(c, m["run_id"])) if settings.use_recipient_timezone else None
+    if not tz.in_send_window(now, m["cw_start"] or settings.window_start, m["cw_end"] or settings.window_end, settings.send_days, zone):
+        where = f"in {zone.key}" if zone else "on this Mac"
+        return ClaimResult(False, "window", f"Outside the sending window {where}.", retry_at=None)
+    day = tz.local_day_start(now)
+    today = c.execute(text(f"SELECT COUNT(*) FROM messages WHERE state IN {COUNTED} AND claimed_at >= :d"), {"d": day}).scalar_one()
+    cap = effective_cap(settings, m["campaign_cap"])
+    if today >= cap:
+        return ClaimResult(False, "daily_cap", f"The daily limit of {cap} emails has been reached.", retry_at=day + 86400)
+    per = c.execute(text(f"SELECT COUNT(*) FROM messages WHERE state IN {COUNTED} AND recipient_domain = :d AND claimed_at >= :s"),
+                    {"d": m["recipient_domain"], "s": day}).scalar_one()
+    if per >= settings.max_per_domain_per_day:
+        return ClaimResult(False, "domain_daily_limit", f"Already {per} email(s) to {m['recipient_domain']} today (limit {settings.max_per_domain_per_day}).", retry_at=day + 86400)
+    gap = settings.min_minutes_between_same_domain * 60
+    last = c.execute(text(f"SELECT MAX(claimed_at) FROM messages WHERE state IN {COUNTED} AND recipient_domain = :d"), {"d": m["recipient_domain"]}).scalar()
+    if last is not None and now - last < gap:
+        return ClaimResult(False, "domain_gap", f"Another person at {m['recipient_domain']} was emailed recently; waiting {settings.min_minutes_between_same_domain} minutes between people.", retry_at=last + gap)
     return ClaimResult(True)
 
 
@@ -154,6 +233,9 @@ def claim(message_id: int, now: float | None, settings: AppSettings, engine: Eng
         res = c.execute(text(
             "UPDATE messages SET state='sending', attempt_id=:a, claimed_at=:now WHERE id=:id AND state='queued' "
             "AND NOT EXISTS (SELECT 1 FROM suppression s WHERE s.email = messages.recipient_email) "
+            "AND NOT EXISTS (SELECT 1 FROM app_state a WHERE a.key = 'pause_all' AND a.value = '1') "
+            "AND EXISTS (SELECT 1 FROM drafts d WHERE d.campaign_id = messages.campaign_id AND d.lead_id = messages.lead_id AND d.kind = messages.kind "
+            "AND d.status = 'approved' AND d.approved = 1 AND d.body = messages.body AND d.subject IS messages.subject) "
             f"AND (SELECT COUNT(*) FROM messages x WHERE x.state IN {COUNTED} AND x.claimed_at >= :day) < :cap "
             f"AND (SELECT COUNT(*) FROM messages x WHERE x.state IN {COUNTED} AND x.recipient_domain = messages.recipient_domain AND x.claimed_at >= :day) < :per "
             f"AND NOT EXISTS (SELECT 1 FROM messages x WHERE x.state IN {COUNTED} AND x.recipient_domain = messages.recipient_domain AND x.claimed_at > :now - :gap)"),
@@ -168,6 +250,42 @@ def claim(message_id: int, now: float | None, settings: AppSettings, engine: Eng
         return again if not again.ok else ClaimResult(False, "lost_race", "Another sender took this slot; try again shortly.")
     slog.log_event("message.claimed", trace_id=(m or {}).get("trace_id") or "", message_id=message_id, domain=(m or {}).get("recipient_domain"))
     return ClaimResult(True, attempt_id=attempt)
+
+
+def resync_snapshots(campaign_id: int, engine: Engine | None = None) -> int:
+    """A queued (never claimed) message follows its draft when the user edits and re-approves it: the snapshot becomes the
+    CURRENTLY approved text. Only approved text is ever copied, and a message past `queued` is never touched."""
+    engine = engine or db.get_engine()
+    with engine.begin() as c:
+        res = c.execute(text(
+            "UPDATE messages SET body = (SELECT d.body FROM drafts d WHERE d.campaign_id = messages.campaign_id AND d.lead_id = messages.lead_id AND d.kind = messages.kind AND d.status='approved' AND d.approved=1), "
+            "subject = (SELECT d.subject FROM drafts d WHERE d.campaign_id = messages.campaign_id AND d.lead_id = messages.lead_id AND d.kind = messages.kind AND d.status='approved' AND d.approved=1) "
+            "WHERE campaign_id=:c AND state='queued' AND EXISTS (SELECT 1 FROM drafts d WHERE d.campaign_id = messages.campaign_id AND d.lead_id = messages.lead_id AND d.kind = messages.kind "
+            "AND d.status='approved' AND d.approved=1 AND (d.body IS NOT messages.body OR d.subject IS NOT messages.subject))"), {"c": campaign_id})
+    return res.rowcount
+
+
+def set_message_id(message_id: int, attempt_id: str, smtp_message_id: str, engine: Engine | None = None) -> bool:
+    """Store the Message-ID BEFORE the SMTP call, so a message left in `sending` / `needs_confirmation` can be found in
+    Gmail > Sent by its id. Only the holder of the current attempt may do this."""
+    engine = engine or db.get_engine()
+    with engine.begin() as c:
+        res = c.execute(text("UPDATE messages SET message_id=:mid WHERE id=:id AND state='sending' AND attempt_id=:a"),
+                        {"mid": smtp_message_id, "id": message_id, "a": attempt_id})
+    return bool(res.rowcount)
+
+
+def release(message_id: int, attempt_id: str, note: str = "", engine: Engine | None = None) -> bool:
+    """sending -> queued, for the one case where the server definitely did not get the message (login refused, no
+    connection, a 4xx before DATA). The claim no longer counts against quotas."""
+    engine = engine or db.get_engine()
+    with engine.begin() as c:
+        res = c.execute(text("UPDATE messages SET state='queued', attempt_id=NULL, claimed_at=NULL, message_id=NULL, error=:e "
+                             "WHERE id=:id AND state='sending' AND attempt_id=:a"), {"e": note[:500] or None, "id": message_id, "a": attempt_id})
+        if res.rowcount:
+            t = c.execute(text("SELECT trace_id FROM messages WHERE id=:i"), {"i": message_id}).scalar()
+            _trace(c, t, "released", (note or "The server did not accept the message; it stays queued")[:200])
+    return bool(res.rowcount)
 
 
 def mark_sent(message_id: int, attempt_id: str, smtp_message_id: str, smtp_result: str = "250 OK", engine: Engine | None = None) -> bool:
