@@ -134,6 +134,7 @@ class BulkApproveIn(BaseModel):
 class BulkApproveOut(BaseModel):
     approved: int
     skipped_flagged: int
+    skipped_blocked: int = 0  # suppressed or replied/bounced/opted-out leads are never approved
 
 
 GenerateDraftsOut = JobOut
