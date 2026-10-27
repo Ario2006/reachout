@@ -245,7 +245,7 @@ class AsyncFetcher:
         if not self.check_public:
             return True
         if host not in self._public:
-            self._public[host] = await asyncio.to_thread(domains.is_public_host, host)
+            self._public[host] = await self._db(domains.is_public_host, host)
         return self._public[host]
 
     async def aclose(self) -> None:
@@ -253,7 +253,7 @@ class AsyncFetcher:
             await self.browser.aclose()
         if self._owns_client:
             await self._client.aclose()
-        self._pool.shutdown(wait=False)
+        self._pool.shutdown(wait=False, cancel_futures=True)  # never block shutdown on a slow DNS lookup
 
     def _delay(self, crawl_delay: float | None) -> float:
         d = self._rand(*self.delay_s)

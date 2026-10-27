@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from backend.core import extractor as x
-from backend.core.crawler import Page
+from backend.core.extractor import Page
 from backend.core.models import AppSettings, EmailConfidence
 
 HTML = (Path(__file__).parent / "fixtures" / "team.html").read_text()

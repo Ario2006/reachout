@@ -88,7 +88,7 @@ def test_drafts_carry_provenance_and_a_reason_for_their_label():
 
 
 def test_the_legacy_extract_page_wrapper_still_calls_the_model_only_when_needed():
-    from backend.core.crawler import Page
+    from backend.core.extractor import Page
     from backend.core.extractor import extract_page
     from backend.core.models import AppSettings
 

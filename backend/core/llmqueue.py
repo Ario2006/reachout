@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -78,12 +79,16 @@ class PeopleBatcher:
         self.seconds = 0.0
         self.down = False
         self.active = self.max_active = 0  # for tests: this must never exceed 1
+        self._pool: ThreadPoolExecutor | None = None  # owned, so close() never waits on a slow generation
 
     def start(self) -> None:
         if self._task is None:
             self._task = asyncio.get_running_loop().create_task(self._run(), name="people-batcher")
 
     async def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=False, cancel_futures=True)
+            self._pool = None
         if self._task:
             self._task.cancel()
             try:
@@ -176,9 +181,12 @@ class PeopleBatcher:
 
     async def _default_call(self, body: str, n: int) -> BatchPeople:
         s = self.settings or AppSettings()
-        return await asyncio.to_thread(
-            llm.generate_json, BatchPeople, SYSTEM, body, model=s.ollama_model, num_ctx=s.num_ctx, keep_alive=s.keep_alive,
-            max_chars=self.batch_chars + 2000, num_predict=min(1400, 300 + 250 * n))
+        if self._pool is None:
+            self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm-batch")
+        return await asyncio.get_running_loop().run_in_executor(
+            self._pool, lambda: llm.generate_json(
+                BatchPeople, SYSTEM, body, model=s.ollama_model, num_ctx=s.num_ctx, keep_alive=s.keep_alive,
+                max_chars=self.batch_chars + 2000, num_predict=min(1400, 300 + 250 * n)))
 
     def snapshot(self) -> dict:
         return {"calls": self.calls, "pages": self.items, "failed": self.failed, "seconds": round(self.seconds, 1),

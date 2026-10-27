@@ -53,3 +53,15 @@ def cancel_run(run_id: int, engine: EngineDep) -> dict:
         jobs.request_cancel(run["job_id"], engine)
     pipeline.reconcile_runs(engine)  # a queued job is cancelled immediately, so its run must follow
     return pipeline.get_run(run_id, engine) or run
+
+
+@router.post("/runs/{run_id}/resume", response_model=RunOut, status_code=202)
+def resume_run(run_id: int, engine: EngineDep) -> dict:
+    """Continue a cancelled or failed run: only the sites it had not finished are crawled."""
+    pipeline.reconcile_runs(engine)
+    if jobs.list_jobs(kind="discovery_run", active_only=True, limit=1, engine=engine):
+        raise HTTPException(409, "A search is already running. Wait for it to finish or cancel it.")
+    try:
+        return pipeline.resume_run(run_id, engine)
+    except ValueError as e:
+        raise HTTPException(404 if "not found" in str(e) else 409, str(e))

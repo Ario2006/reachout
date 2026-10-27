@@ -125,7 +125,8 @@ def test_no_response_ever_contains_the_app_password(client, healthy):
 def test_get_settings_defaults(client):
     j = client.get("/settings").json()
     assert j["settings"]["ollama_model"] == "qwen2.5:3b-instruct"
-    assert j["limits"]["hard_daily_ceiling"] == 100 and j["warnings"] == []
+    assert j["limits"]["hard_daily_ceiling"] == 100
+    assert len(j["warnings"]) == 1 and "no contact" in j["warnings"][0]  # the only default warning: crawler contact not set
     assert j["gmail_password_set"] is False
 
 
@@ -375,3 +376,14 @@ def test_every_http_method_in_the_api_is_covered_by_cors(app):
     used = {m.upper() for ops in app.openapi()["paths"].values() for m in ops}
     allowed = {"GET", "POST", "PUT", "PATCH", "DELETE"}
     assert used <= allowed, f"add {used - allowed} to the CORS allow_methods"
+
+
+def test_resume_endpoint_requeues_only_cancelled_or_failed_runs(client, engine):
+    plan = {"mode": "service", "search_queries": ["q"]}
+    r = client.post("/discovery/run", json={"request_text": "a", "plan": plan}).json()
+    assert client.post(f"/discovery/runs/{r['id']}/resume").status_code == 409  # still queued/active
+    client.post(f"/discovery/runs/{r['id']}/cancel")
+    assert client.get(f"/discovery/runs/{r['id']}").json()["state"] == "cancelled"
+    again = client.post(f"/discovery/runs/{r['id']}/resume")
+    assert again.status_code == 202 and again.json()["state"] == "queued" and again.json()["job_id"] != r["job_id"]
+    assert client.post("/discovery/runs/999/resume").status_code in (404, 409)

@@ -65,7 +65,10 @@ class AppSettings(BaseModel):
     fetch_timeout_s: int = Field(15, ge=5, le=60)
     search_source: str = Field("ddgs", pattern=r"^(ddgs|searxng)$")
     searxng_url: str = ""
-    crawl_concurrency: int = Field(4, ge=1, le=8)
+    global_concurrency: int = Field(30, ge=1, le=64)  # sites crawled at once; each site is still one request at a time
+    page_cache_ttl_days: int = Field(14, ge=1, le=90)
+    crawler_contact: str = Field("", max_length=200)  # URL or email shown in the crawler's User-Agent; never defaulted
+    browser_tier_enabled: bool = False  # headless Chromium for JS-only pages (needs a one-time browser install)
     max_domains_per_run: int = Field(60, ge=1, le=300)
     max_leads_per_site: int = Field(5, ge=1, le=25)
     target_leads: int = Field(30, ge=0, le=500)  # widen the search until this many new leads (0 = never widen)
@@ -139,6 +142,10 @@ def risk_warnings(s: AppSettings) -> list[str]:
             "Guessed addresses are only MX-checked, never verified. They bounce often, and "
             "bounces above 5% auto-pause a campaign."
         )
+    if not s.crawler_contact.strip():
+        out.append("The crawler's User-Agent has no contact. Add a URL or email in Crawling settings so site owners can reach you.")
+    if s.global_concurrency > 40:
+        out.append("Crawling more than 40 sites at once uses a lot of memory and bandwidth on an 8 GB Mac.")
     if s.crawl_delay_min_s < 1.0:
         out.append("Crawl delay under 1 s per domain is impolite.")
     if s.max_pages_per_domain > 10:

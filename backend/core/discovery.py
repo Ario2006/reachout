@@ -295,3 +295,41 @@ def interleave(a: list[Candidate], b: list[Candidate]) -> list[Candidate]:
                 seen.add(c.domain)
                 out.append(c)
     return out
+
+
+async def expand_list_pages_async(
+    hits: list[SearchHit],
+    fetch,  # noqa: ANN001 - async callable(url) -> object with .html and .final_url
+    settings: AppSettings,
+    *,
+    max_pages: int = 8,
+    per_page: int = 40,
+    on_page: Callable[[str, int], None] | None = None,
+    cancelled: Callable[[], bool] = lambda: False,
+) -> list[Candidate]:
+    """expand_list_pages for the async fetcher: list-like result pages become candidate company sites."""
+    urls: list[str] = []
+    for h in hits:
+        d = domains.registrable(h.url)
+        if (is_list_hit(h) and d and not domains.is_blocked(d, settings.domain_blocklist_extra)
+                and h.url not in urls and len(urls) < max_pages):
+            urls.append(h.url)
+    found: dict[str, Candidate] = {}
+    for url in urls:
+        if cancelled():
+            break
+        page = await fetch(url)
+        html = getattr(page, "html", "") if page is not None else ""
+        if not html:
+            continue
+        links = outbound_company_links(html, getattr(page, "final_url", url) or url, settings, per_page)
+        for href, text in links:
+            d = domains.registrable(href)
+            c = found.get(d)
+            if c is None:
+                found[d] = Candidate(domain=d, url=href, title=text, score=1)
+            else:
+                c.score += 1
+        if on_page:
+            on_page(url, len(links))
+    return sorted(found.values(), key=lambda c: -c.score)

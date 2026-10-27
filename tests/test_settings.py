@@ -13,7 +13,8 @@ def test_defaults_match_spec(engine):
     assert (s.daily_cap, s.delay_min_s, s.delay_max_s) == (25, 60, 180)
     assert (s.window_start, s.window_end, s.send_days) == ("09:00", "18:00", [0, 1, 2, 3, 4, 5])
     assert s.max_pages_per_domain == 6 and s.fetch_timeout_s == 15
-    assert (s.max_leads_per_site, s.max_domains_per_run, s.crawl_concurrency) == (5, 60, 4)
+    assert (s.max_leads_per_site, s.max_domains_per_run, s.global_concurrency) == (5, 60, 30)
+    assert (s.page_cache_ttl_days, s.crawler_contact, s.browser_tier_enabled) == (14, "", False)
     assert s.allow_guessed_emails is False
 
 
@@ -57,7 +58,8 @@ def test_no_secret_fields_in_settings():
 
 
 def test_risk_warnings():
-    assert risk_warnings(AppSettings()) == []
+    assert [w for w in risk_warnings(AppSettings()) if "contact" not in w] == []
+    assert any("contact" in w for w in risk_warnings(AppSettings())) and not any("contact" in w for w in risk_warnings(AppSettings(crawler_contact="me@x.org")))
     assert risk_warnings(AppSettings(daily_cap=30))
     assert risk_warnings(AppSettings(delay_min_s=10, delay_max_s=20))
     assert risk_warnings(AppSettings(allow_guessed_emails=True))

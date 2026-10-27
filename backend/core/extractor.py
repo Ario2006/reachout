@@ -13,10 +13,17 @@ from pydantic import BaseModel, Field
 from selectolax.lexbor import LexborHTMLParser
 
 from backend.core import domains, llm
-from backend.core.crawler import Page
 from backend.core.models import AppSettings, EmailConfidence
 
 log = logging.getLogger("reachout.extractor")
+
+
+@dataclass
+class Page:
+    """A fetched page, as the extractor sees it."""
+    url: str
+    html: str
+    status: int = 200
 
 CONTEXT_CHARS = 300
 _EMAIL_IN_TEXT = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
