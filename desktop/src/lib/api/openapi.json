@@ -3032,6 +3032,11 @@
       },
       "ReadinessItem": {
         "properties": {
+          "blocking": {
+            "default": true,
+            "title": "Blocking",
+            "type": "boolean"
+          },
           "detail": {
             "title": "Detail",
             "type": "string"
@@ -6821,7 +6826,7 @@
     },
     "/messages/{message_id}/confirm": {
       "post": {
-        "description": "needs_confirmation -> sent or failed, by the user's word. Never resends.",
+        "description": "needs_confirmation -> sent (it went out) or queued (it did not). Never resends by itself.",
         "operationId": "confirm_message_messages__message_id__confirm_post",
         "parameters": [
           {

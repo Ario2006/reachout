@@ -1,11 +1,13 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useMatch } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSettings, useSetupStatus } from '@/lib/api/hooks'
+import { useSendingStatus, useSetPauseAll } from '@/lib/api/hooks-campaigns'
 import { cn } from '@/lib/utils'
 import { NAV, type NavItem } from './nav'
 
@@ -114,7 +116,11 @@ function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   const model = status.data?.checks.find((c) => c.id === 'model')
   const ready = ollama?.status === 'ok' && model?.status === 'ok'
   const label = ollama === undefined ? 'Checking Ollama…' : ollama.status !== 'ok' ? 'Ollama offline' : model?.status !== 'ok' ? 'Model missing' : 'Ollama ready'
-  const cap = settings.data?.settings.daily_cap
+  const sending = useSendingStatus()
+  const setPaused = useSetPauseAll()
+  const cap = sending.data?.cap ?? settings.data?.settings.daily_cap
+  const sentToday = sending.data?.sent_today ?? 0
+  const pausedAll = sending.data?.paused_all ?? false
 
   return (
     <div className="space-y-2 px-3 pb-3 text-xs">
@@ -135,17 +141,18 @@ function SidebarFooter({ collapsed }: { collapsed: boolean }) {
         <>
           <div className="text-muted-foreground flex justify-between" data-testid="sends-today">
             <span>Sent today</span>
-            <span className="font-mono">0 / {cap ?? '…'}</span>
+            <span className="font-mono">{sentToday} / {cap ?? '…'}</span>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <label className="text-muted-foreground flex items-center justify-between gap-2 opacity-60">
-                <span>Pause all sending</span>
-                <Switch disabled aria-label="Pause all sending (available after milestone 4)" />
-              </label>
-            </TooltipTrigger>
-            <TooltipContent side="right">Available once sending is built (milestone 4)</TooltipContent>
-          </Tooltip>
+          <label className="text-muted-foreground flex items-center justify-between gap-2" data-testid="pause-all">
+            <span>Pause all sending</span>
+            <Switch
+              checked={pausedAll}
+              disabled={sending.data === undefined || setPaused.isPending}
+              onCheckedChange={(v) => setPaused.mutate(v, { onError: () => toast.error('Could not change the pause-all switch. Try again.') })}
+              aria-label="Pause all sending"
+            />
+          </label>
+          {sending.data?.caffeinate_active ? <div className="text-muted-foreground" data-testid="awake-note">Keeping this Mac awake while sending</div> : null}
         </>
       )}
     </div>

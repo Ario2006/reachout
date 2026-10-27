@@ -699,7 +699,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm Message
-         * @description needs_confirmation -> sent or failed, by the user's word. Never resends.
+         * @description needs_confirmation -> sent (it went out) or queued (it did not). Never resends by itself.
          */
         post: operations["confirm_message_messages__message_id__confirm_post"];
         delete?: never;
@@ -2194,6 +2194,11 @@ export interface components {
         };
         /** ReadinessItem */
         ReadinessItem: {
+            /**
+             * Blocking
+             * @default true
+             */
+            blocking: boolean;
             /** Detail */
             detail: string;
             /**
