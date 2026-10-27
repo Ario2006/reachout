@@ -5,9 +5,9 @@ contact emails, drafts personalised emails with a small local LLM, and sends the
 batches **only after you approve them**. See `app-spec.md` (behaviour) and `ui-migration-spec.md`
 (desktop UI) for the full spec, and `ARCHITECTURE.md` for how it fits together.
 
-**Status:** Milestone 2 of the revised plan. Done: the desktop shell, first-run wizard, Settings, and the
-lead pipeline (**Discover** and **Leads**). Compose, Campaigns, Inbox and Dashboard appear in the
-sidebar as "Soon".
+**Status:** Milestone 2b of the revised plan. Done: the desktop shell, first-run wizard, Settings, the
+lead pipeline (**Discover** and **Leads**), and the production-grade crawl engine and send-safety core (2b).
+Compose, Campaigns, Inbox and Dashboard appear in the sidebar as "Soon".
 The previous Streamlit version is preserved at the git tag `streamlit-m1`.
 
 ## Requirements
@@ -43,13 +43,22 @@ opt-out footer, and acknowledgement of the legal notice.
 1. **Discover**: describe who you want to reach (or pick an example), choose a mode or leave it on Auto,
    and press *Make a plan*. The local model turns the request into roles, industries, regions and search
    queries in a few seconds. Edit any of it, then *Run search*.
-2. The worker searches the web, crawls each site politely (robots.txt respected, 1-2 s between requests
-   to a site, 6 pages per site by default), pulls out emails and people, checks the domain has a mail
-   server, and saves the result. You watch it happen: a stepper, a streaming log, and a table of sites.
+2. The worker searches the web, then crawls many sites at once (30 by default) but each site politely: one
+   request at a time, 1-2 s apart (or the site's `Crawl-delay`), robots.txt respected, at most 6 pages per
+   site, and it stops early once a site has enough contacts. Pages are cached for 14 days, so a repeat search
+   fetches almost nothing. It pulls out emails and people (page structure first, the local model only when
+   that is not enough), checks the domain has a mail server, scores each lead, and saves it. You watch it
+   happen: a stepper, a streaming log, a table of sites and a "How the crawl went" panel. A cancelled or failed
+   search can be **resumed**: finished sites and fetched pages are kept.
 3. **Leads**: a fast table of everything found. Search, filter, sort (Shift-click for a second sort key),
    edit cells by double-clicking, open the side drawer for the source page and the exact text the lead came
    from, select rows for bulk actions, and import or export CSV. Every search also writes
    `~/Reachout/exports/leads-run-<n>.csv`.
+
+Every lead has a **score from 0 to 100** and the reasons behind it (open the drawer): the label below is
+worth the most, then a name and role that match the address and your request, the kind of page it came
+from, a working mail server, and how fresh the page is. The drawer also lists every page the address was
+seen on and a step-by-step "Why was this found?" trace. Sort or filter the table by score.
 
 Every lead is labelled so you know how far to trust the address:
 
@@ -58,6 +67,9 @@ Every lead is labelled so you know how far to trust the address:
 | **Personal** | A person's address, published on their own site, next to a name that matches it |
 | **Generic** | A role address such as `info@`, `careers@`, `hello@`, or a personal-looking address with no matching name on the page |
 | **Guessed** | Built from a listed person's name and the domain's address pattern. Only the domain's mail server is checked. Never sent to unless you allow it in Settings |
+
+The same address, or the same person (name + company domain), is never stored twice: a published address
+replaces a guessed one and the extra source pages are kept. Throwaway-mailbox domains are dropped.
 
 A search aims for about 30 leads and keeps going with new wording if it is short. Measured results for the
 three example requests are in [`docs/m2-yields.md`](docs/m2-yields.md): 32, 36 and 38 leads in 5 to 9 minutes,
@@ -74,18 +86,43 @@ REACHOUT_HOME=/tmp/reachout-try PYTHONPATH=. .venv/bin/python -m backend.cli dis
   "Pre-seed investors who back AI developer tools in India/SEA" --max-domains 40
 ```
 
+## Crawl engine (milestone 2b)
+
+Async HTTP (`httpx`, pooled connections) with a waterfall: **page cache** (SQLite, conditional requests with
+ETag / Last-Modified, robots and "not found" answers cached too) then **HTTP**, then an optional headless
+**browser** for JavaScript-only pages. The browser tier needs Playwright and is off by default:
+
+```bash
+.venv/bin/pip install playwright && .venv/bin/python -m playwright install chromium   # then enable it in Settings > Crawling
+```
+
+Without it, JavaScript-only pages are simply skipped and counted. Settings > Crawling controls concurrency,
+the cache period and the crawler contact (a URL or email shown to site owners in the User-Agent; blank by
+default, with a warning, and never filled in from your Gmail address).
+
+Measured numbers (`scripts/bench_crawl.py`, no model): see [`docs/m2b-benchmarks.md`](docs/m2b-benchmarks.md).
+
+## Send safety (built ahead of sending)
+
+`backend/core/outbox.py` is the state machine the sender will use in milestone 4, tested without a mail server:
+one message per person per campaign (enforced by the database), an atomic claim that re-checks suppression, the
+daily cap (never above 100), at most 2 emails per company domain per day and 60 minutes between two people at one
+company, a send window judged in the recipient's time zone when it can be inferred, and crash recovery: an email
+caught between `sending` and `sent` becomes **needs confirmation** and is never resent automatically.
+
 ## Where things live
 
 | What | Where |
 | --- | --- |
 | Database, exports | `~/Reachout/` (override with `REACHOUT_HOME`) |
-| Logs | `~/Reachout/logs/` (`desktop.log`, `api.log`, `worker.log`); Help > Show Logs |
+| Logs | `~/Reachout/logs/` (`desktop.log`, `api.log`, `worker.log`, `pipeline.jsonl`: one JSON line per lead decision with a correlation id); Help > Show Logs |
 | App Password | macOS Keychain, service `Reachout` |
 | Non-secret settings | `settings` table in the SQLite DB |
 
 ## Safety rules (enforced in the backend, not just the UI)
 
 - Nothing sends without your approval (built in milestones 3 and 4).
+- A message is never sent twice, and one found mid-send after a crash waits for your confirmation.
 - The suppression list is always enforced. Bounce and opt-out entries can never be removed from the
   UI; entries you add by hand can, after typing the address to confirm.
 - The daily send cap is clamped to a hard ceiling of 100 whatever the setting says.
@@ -98,6 +135,7 @@ REACHOUT_HOME=/tmp/reachout-try PYTHONPATH=. .venv/bin/python -m backend.cli dis
 .venv/bin/python -m pytest -q                       # backend
 cd desktop && npm test                              # frontend unit/component tests (Vitest)
 cd desktop && npm run test:e2e                      # Electron tests (Playwright): shell, lifecycle, Discover and Leads
+PYTHONPATH=. .venv/bin/python scripts/bench_crawl.py   # crawl benchmark on a fixed list of 50 domains (real network, no model)
 cd desktop && REACHOUT_LIVE=1 npm run test:e2e      # also one real search through the app (needs internet + Ollama, ~2 min)
 cd desktop && npm run typecheck && npm run lint     # strict TypeScript, no `any`
 cd desktop && npm run gen:api -- --check            # generated API types are up to date

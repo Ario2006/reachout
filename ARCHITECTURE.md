@@ -1,7 +1,7 @@
 # Architecture
 
 Reachout is a local macOS desktop app. Nothing leaves the machine except your outgoing email and
-polite web requests. This file describes the moving parts as built (through Milestone 2).
+polite web requests. This file describes the moving parts as built (through Milestone 2b).
 
 ```
 ┌──────────────────────── Electron main process ────────────────────────┐
@@ -33,8 +33,9 @@ The API and worker never talk to each other directly. They share state through S
 ```
 backend/
   core/        UI-agnostic logic: config, db, models, secrets, llm, health, jobs, events, job_handlers,
-               planner, discovery, crawler, extractor, validator, leads, exports, pipeline, domains
-    migrations/  numbered .sql files, applied in order (001_init, 002_jobs_events, 003_lead_pipeline)
+               planner, discovery, afetch, crawlplan, heuristics, analysis, extractor, llmqueue, engine, validator,
+               scoring, leads, exports, pipeline, store, outbox, tz, slog, domains
+    migrations/  numbered .sql files, applied in order (001_init … 004_engine)
   api/         FastAPI app factory, security middleware, schemas, routers/
   worker.py    background process entry
   cli.py       developer tool: run the pipeline from a terminal
@@ -92,48 +93,57 @@ A worker that crashed mid-job leaves it `running`; on start, those jobs are mark
 
 ## The lead pipeline
 
-`pipeline.run_discovery` is the job handler for `discovery_run`. One run is a pipeline of small, separately
-testable modules in `backend/core`:
+`pipeline.run_discovery` is the job handler for `discovery_run`. It runs one asyncio event loop per run. Modules in
+`backend/core`, each separately testable:
 
 ```
-request ──planner──▶ Plan ──discovery──▶ candidate sites ──crawler──▶ pages ──extractor──▶ lead drafts
- (LLM, 1 call)     (editable)  ddgs + list pages        robots, pacing       emails, people      │
-                                + OpenStreetMap                                                  ▼
-                                                              validator (syntax, MX) ──leads.ingest──▶ SQLite ──▶ `lead` events
+request ─planner─▶ Plan ─discovery─▶ candidate sites ─engine─▶ per-site crawl ─▶ analysis ─▶ drafts ─▶ validate ─▶ leads.ingest
+(LLM, 1 call)   (editable) ddgs + lists  (async, 30 at once)  afetch + crawlplan  heuristics   merge,     MX, disposable   score, dedupe,
+                            + OpenStreetMap                   cache→HTTP→browser  then LLM     trim       domains          sources, trace
 ```
 
-- **Planner** asks the model for a plan as JSON (structured output, validated by Pydantic). If the model
-  is unreachable or returns junk twice, a deterministic template plan is used and labelled as such.
-  Model queries about job listings are dropped, and template queries (company pages and "top N" lists)
-  are always added, because job-board results were the main source of bad leads.
-- **Discovery** runs the queries through `ddgs` (or a local SearXNG), applies the blocklist, ranks one
-  candidate per registrable domain, and optionally follows list pages ("Top 50 AI startups in
-  Bangalore") to the companies they link to. Service mode can also query OpenStreetMap.
-- **Crawler** fetches the homepage, the search hit, keyword-matched links and common paths, up to the page
-  cap. robots.txt follows RFC 9309 (4xx = no rules, 5xx or unreachable = disallow). Requests to one host
-  are paced, responses are capped at 2 MB, and private/loopback hosts are refused.
-- **Extractor** finds addresses in `mailto:` links, Cloudflare-protected links and visible text (with
-  `[at]`/`[dot]` de-obfuscation), rejects image-like, placeholder and automated ones, and keeps only
-  addresses on the site's own domain. It calls the model for people only on pages that look like team
-  pages, never on job listings or portfolio/news/list pages, and only keeps a name that literally appears
-  on the page. A person is only `personal` when a name on the page matches the address; a guess is only made
-  for a target-role person listed on the site's own team page whose role is a plain title.
-- **Validator** checks syntax and that the domain has an MX record (cached, retried once).
-- **Leads** stores everything with its source URL and a context snippet taken from the page. Suppressed
-  addresses are skipped, duplicates are ignored, and a published address upgrades a guessed one.
+- **Planner** asks the model for a plan as JSON (structured output, validated by Pydantic), with a deterministic
+  template fallback. Job-listing queries are dropped; company-page and "top N" templates are always added.
+- **Discovery** runs the queries through `ddgs` (or a local SearXNG), applies the blocklist, ranks one candidate per
+  registrable domain, and can follow list pages to the companies they link to. Service mode can query OpenStreetMap.
+- **Fetcher** (`afetch.AsyncFetcher`): one pooled `httpx.AsyncClient`, a global semaphore (30), and a per-host gate so
+  a site sees one request at a time, 1-2 s apart or its `Crawl-delay` (up to 10 s; longer means the site is skipped).
+  Waterfall: SQLite **page cache** (14 days, conditional requests, robots and 404s cached) → HTTP → optional
+  Playwright browser (lazy, at most 2 pages, images and fonts blocked) for pages that arrive as an empty JavaScript
+  shell. Timeouts 5 s connect / 15 s total, 2 MB cap, at most 2 retries with backoff, jitter and `Retry-After`, a
+  per-domain circuit breaker, DNS failures remembered, private/loopback hosts refused. robots.txt follows RFC 9309.
+- **Planning a site** (`crawlplan`): homepage first, then links scored by page type and the run's mode, the
+  `sitemap.xml` only when the homepage links little, and at most three blind path guesses as a last resort; at most
+  6 pages and an early stop once a site has enough contacts.
+- **Analysis** (`heuristics`, `analysis`, `extractor`): addresses from `mailto:`, Cloudflare-protected links and
+  visible text (de-obfuscated); people from JSON-LD, microdata, repeated team cards and heading/title pairs. The model
+  is asked only for team pages those cannot read, and only names that literally appear on the page are kept.
+- **LLM queue** (`llmqueue.PeopleBatcher`): one consumer, a bounded queue, several page snippets per call (about
+  3,000 tokens), never two generations at once. The crawl never waits for it.
+- **Validator** checks syntax, drops disposable-mailbox domains, and requires an MX record (positive lookups cached
+  in memory, "no mail server" answers persisted for 30 days).
+- **Scoring** (`scoring`): 0-100 from the label, name and role match, page type, MX and freshness; every point has a
+  reason that is stored with the lead.
+- **Leads** (`leads.ingest`): suppressed addresses skipped; the same email or the same person (name + registrable
+  domain) is never stored twice (a published address replaces a guess); every source page goes to `lead_sources`
+  and every decision to `trace_events` under the lead's `trace_id`, mirrored to `logs/pipeline.jsonl`.
 
-If a run finishes short of its target (default 30 leads) it **widens**: it searches with fresh wording
-(`planner.more_queries`), follows more list pages, and crawls only sites it has not seen, for up to 4 rounds, about
-12 minutes, or the site limit. Each site keeps at most 5 leads (`select_best` ranks them for the kind of outreach),
-because one large company can otherwise contribute dozens of regional mailboxes.
+If a run finishes short of its target (default 30 leads) it **widens**: fresh search wording, more list pages, only
+sites not yet seen, for up to 4 rounds, about 12 minutes, or the site limit. Each site keeps at most 5 leads.
+A run can be **cancelled** (takes effect within about two seconds, keeps what was found) and **resumed**: per-URL
+state is in `crawl_urls`, so finished sites are skipped and fetched pages come from the cache.
 
-Sites are processed a few at a time (default 4). Each site is crawled, read, validated and stored as a unit,
-so leads appear in the UI as soon as their site finishes. Only one model call runs at a time (a process-wide
-lock), and a run stops at 25 minutes. Cancelling keeps everything found so far.
+The UI follows a run through four SSE event types: `run` (stage, counters and the engine statistics), `run_domain`,
+`run_log`, and `lead`. State is also in the database (`search_runs`, `run_domains`, `run_log`), so a reload rebuilds
+the screen.
 
-The UI follows a run through four SSE event types: `run` (stage and counters), `run_domain`, `run_log`, and
-`lead`. State is also in the database (`search_runs`, `run_domains`, `run_log`), so a reload rebuilds the
-screen.
+## Send safety
+
+`outbox` owns the message state machine (`queued → sending → sent | failed | needs_confirmation`). A unique index
+allows one message per (campaign, lead, kind). `claim` is one SQL statement that re-checks suppression, the daily cap,
+the per-company daily limit and the gap between people at one company; the worker marks any message left in `sending`
+as `needs_confirmation` on start and nothing ever resends it automatically. `tz` infers the recipient's zone from a
+country domain or the search region, so the send window applies where the reader is. SMTP itself arrives in milestone 4.
 
 ## Supervision
 

@@ -11,6 +11,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from backend.core import outbox, config, db, events, jobs, pipeline
 from backend.core.job_handlers import HANDLERS
+from backend.core.store import CrawlStore
 from backend.procutil import start_parent_watchdog
 
 log = logging.getLogger("reachout.worker")
@@ -33,6 +34,7 @@ def build_scheduler(engine=None, runner: jobs.JobRunner | None = None) -> Blocki
         sched.add_job(runner.tick, "interval", seconds=JOB_POLL_EVERY_S, id="jobs",
                       max_instances=1, coalesce=True)
     sched.add_job(lambda: events.prune(engine=engine), "interval", hours=1, id="prune_events")
+    sched.add_job(lambda: CrawlStore(engine).prune_pages(), "interval", hours=6, id="prune_page_cache")  # pages older than 90 days
     return sched
 
 

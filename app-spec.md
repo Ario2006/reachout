@@ -241,3 +241,16 @@ This section tightens sections 4.1 and 4.3 and wins where it conflicts with them
 
 - `scripts/bench_crawl.py` runs a fixed domain list reproducibly. Unit tests use recorded HTML fixtures (extractor, robots, cache, retry and circuit breaker, idempotent send including a simulated crash between `sending` and `sent`).
 - Targets on a normal home connection: crawl **200 domains (up to 6 pages each) in under 10 minutes** excluding LLM time; backend process peak RSS under about 1.5 GB; far fewer LLM calls per 100 leads than the one-call-per-page baseline (about 320). Report honestly if a number falls short, and why.
+
+### 13.E Status and deviations (as built, milestone 2b)
+
+Numbers are in `docs/m2b-benchmarks.md`: 200 domains cold in 140 s (target 10 min), peak RSS 299 MB (target 1.5 GB), LLM calls per 100 leads 39.5 (baseline about 320), 100% cache hits and zero requests on a repeat run. Deviations and gaps:
+
+1. **Browser tier is untested against a real browser.** Playwright and Chromium are not in `requirements.txt` and were not installed; the tier is lazy and skipped cleanly when absent, and is covered by tests with a stub only. Enabling it is a Settings switch plus a one-line install command; there is no in-app "Install browser" button.
+2. **HTTP/2 was not adopted.** A paired benchmark showed 10 to 20% inside the run-to-run noise, and a site is fetched one request at a time, so multiplexing has little to work with. No `h2` dependency.
+3. **Recipient time zone** is inferred only from single-zone country domains and from plan regions that all agree; `.com`, `.ai`, `.io`, `.au`, `.ca`, `.us` and similar fall back to the sender's clock. Daily quotas use the Mac's local day.
+4. **Only "no mail server" answers are persisted** across runs (30 days); positive MX results are cached in memory for the run, so a repeat run still does DNS lookups.
+5. **Score ordering is not strictly by label**: a guessed address for the exact role you asked for can outscore a generic `careers@`. The stored reasons explain every point; sending still excludes guessed addresses by default.
+6. **Send-safety has no sender yet.** Bounce auto-pause, warm-up, approval and the opt-out footer remain with milestones 3 and 4; `outbox` enforces suppression, the daily cap and ceiling, per-company limits, the send window, one message per person, and crash recovery now.
+7. **Old crawler removed.** `backend/core/crawler.py` is gone; `settings.crawl_concurrency` became `global_concurrency` (default 30).
+
