@@ -67,7 +67,8 @@ def test_the_whole_outreach_loop(engine, client):
         lead_ids = [f.lead(engine, email=f"{n}@{n}corp.test", company="Acme", name=n.title(), context_snippet=SNIPPET) for n in ("ann", "bob", "cy")]
         tpl = next(t for t in client.get("/templates").json() if t["mode"] == "internship")
         client.put("/profile", json={"fields": [{"key": k, "label": k, "value": "I build software."} for k in ("my_summary", "my_pitch", "my_traction")]})
-        cid = client.post("/campaigns", json={"name": "Spring", "template_id": tpl["id"], "mode": "internship"}).json()["id"]
+        cid = client.post("/campaigns", json={"name": "Spring", "template_id": tpl["id"], "mode": "internship",
+                                                "followups_enabled": True, "followup_days": [4, 9]}).json()["id"]
 
         # drafts: generated, nothing sendable before approval
         job = client.post("/drafts/generate", json={"campaign_id": cid}).json()
@@ -116,5 +117,18 @@ def test_the_whole_outreach_loop(engine, client):
         w.run_ticks(sender, svc, 6, step=86400)
         assert not [e for e in svc.fake_mailer.sent[before:] if e.to_addr in ("ann@anncorp.test", "bob@bobcorp.test")]
         assert len([e for e in svc.fake_mailer.sent if e.to_addr == "cy@cycorp.test"]) == 1  # and nobody gets a duplicate
+
+        # follow-ups: day 4 goes only to the lead who stayed silent, in the same thread
+        from backend.core import followups
+        svc.fake_clock.advance(5 * 86400)
+        followups.tick(engine, svc.fake_clock.now())
+        w.run_ticks(sender, svc, 6, step=400)
+        later = svc.fake_mailer.sent[before:]
+        fu = [e for e in later if e.subject.startswith("Re: ")]
+        assert [e.to_addr for e in fu] == ["cy@cycorp.test"]
+        assert fu[0].in_reply_to == by["cy@cycorp.test"].message_id and "reply 'stop'" in fu[0].body
+        assert fu[0].subject == "Re: " + by["cy@cycorp.test"].subject
+        plan = client.get(f"/campaigns/{cid}/followups").json()
+        assert plan["counts"].get("sent", 0) == 1
     finally:
         services.use(None)
