@@ -1750,6 +1750,8 @@ export interface components {
             kind: "followup_1" | "followup_2";
             /** Lead Id */
             lead_id: number;
+            /** Reason */
+            reason?: string | null;
         };
         /** FunnelStage */
         FunnelStage: {

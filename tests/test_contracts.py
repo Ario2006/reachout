@@ -193,11 +193,6 @@ def test_large_attachment_gets_a_warning(client, tmp_path):
 
 
 # ------------------------------------------------------------------ stubs and schema
-def test_unbuilt_endpoints_answer_501_not_500(client):
-    for method, path in [("get", "/campaigns/1/followups")]:  # milestone 6 is the only stub left
-        assert getattr(client, method)(path).status_code == 501, path
-
-
 def test_committed_openapi_matches_the_code():
     """The frontend client is generated from this file; a drift means someone forgot `npm run gen:api`."""
     committed = Path(__file__).resolve().parent.parent / "desktop/src/lib/api/openapi.json"
