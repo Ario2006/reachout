@@ -194,6 +194,18 @@ reachout/
 - Milestone 2b (section 13.D): the crawl, cache, memory and LLM-call targets are measured with `scripts/bench_crawl.py` and reported.
 - Unit tests cover: email extraction and de-obfuscation, MX validation, confidence labelling, guardrails, send cap/window logic, IMAP reply/bounce matching (with fixture `.eml` files), suppression enforcement.
 
+## 11. Out of scope for v1
+
+Open/click tracking, LinkedIn automation, multi-user support, cloud hosting, HTML-designed emails, A/B testing, CRM integrations, paid data providers.
+
+## 12. Working agreement for Claude Code
+
+- Read this whole file first, then propose the plan for milestone 1 and wait for my "go".
+- Build one milestone at a time; run the tests and a manual check, then summarise what works, what doesn't, and any deviation from this spec before starting the next.
+- Prefer small, well-maintained libraries; no heavy infrastructure (no Docker, Redis, Postgres, Kafka).
+- Ask me before adding any dependency that needs an API key or costs money.
+- Keep `README.md` current with setup, usage and troubleshooting.
+
 ## 13. Production-grade crawling and outreach engine
 
 This section tightens sections 4.1 and 4.3 and wins where it conflicts with them. Behaviour, data-model, safety and legal rules elsewhere in this file are unchanged. Everything here is local and free: no paid services, no API keys, no Docker/Redis/Postgres.
@@ -229,15 +241,3 @@ This section tightens sections 4.1 and 4.3 and wins where it conflicts with them
 
 - `scripts/bench_crawl.py` runs a fixed domain list reproducibly. Unit tests use recorded HTML fixtures (extractor, robots, cache, retry and circuit breaker, idempotent send including a simulated crash between `sending` and `sent`).
 - Targets on a normal home connection: crawl **200 domains (up to 6 pages each) in under 10 minutes** excluding LLM time; backend process peak RSS under about 1.5 GB; far fewer LLM calls per 100 leads than the one-call-per-page baseline (about 320). Report honestly if a number falls short, and why.
-
-## 11. Out of scope for v1
-
-Open/click tracking, LinkedIn automation, multi-user support, cloud hosting, HTML-designed emails, A/B testing, CRM integrations, paid data providers.
-
-## 12. Working agreement for Claude Code
-
-- Read this whole file first, then propose the plan for milestone 1 and wait for my "go".
-- Build one milestone at a time; run the tests and a manual check, then summarise what works, what doesn't, and any deviation from this spec before starting the next.
-- Prefer small, well-maintained libraries; no heavy infrastructure (no Docker, Redis, Postgres, Kafka).
-- Ask me before adding any dependency that needs an API key or costs money.
-- Keep `README.md` current with setup, usage and troubleshooting.
